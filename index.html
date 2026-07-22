@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#070b17">
-  <meta name="description" content="SignalLead AI classe automatiquement les entreprises locales selon leur potentiel commercial à partir de données publiques officielles.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://www.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org https://recherche-entreprises.api.gouv.fr; font-src 'self'; upgrade-insecure-requests">
+  <meta name="description" content="SignalLead AI classe les restaurants, fast-foods et entreprises du bâtiment selon leur potentiel commercial à partir de données publiques officielles.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://nominatim.openstreetmap.org https://recherche-entreprises.api.gouv.fr; frame-src https:; font-src 'self'; upgrade-insecure-requests">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>SignalLead AI — Prospection locale intelligente</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b17'/%3E%3Cpath d='M15 42V22h8l9 12 9-12h8v20h-8V34l-9 11-9-11v8z' fill='%23a970ff'/%3E%3C/svg%3E">
@@ -28,10 +28,9 @@
       </nav>
 
       <section class="source-card" aria-labelledby="source-title">
-        <strong id="source-title">Sources publiques officielles</strong>
-        <p>Entreprises issues de l’Annuaire des Entreprises et de l’INSEE. Géolocalisation de la zone par OpenStreetMap.</p>
-        <a href="https://annuaire-entreprises.data.gouv.fr/" target="_blank" rel="noopener noreferrer">Annuaire des Entreprises</a><br>
-        <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© contributeurs OpenStreetMap</a>
+        <strong id="source-title">Sources officielles</strong>
+        <p>Registre Sirene via l’Annuaire des Entreprises. Les associations, administrations et services publics sont exclus du classement.</p>
+        <a href="https://annuaire-entreprises.data.gouv.fr/" target="_blank" rel="noopener noreferrer">Annuaire des Entreprises</a>
       </section>
     </aside>
 
@@ -39,7 +38,7 @@
       <header class="topbar">
         <div>
           <strong>Détection d’opportunités commerciales</strong>
-          <small>Classement explicable à partir du registre officiel des entreprises françaises</small>
+          <small>Restaurants, restauration rapide et bâtiment — capacité d’achat estimée et données vérifiables</small>
         </div>
         <button class="secondary-button" id="export-button" type="button">Exporter en CSV</button>
       </header>
@@ -49,10 +48,10 @@
 
         <section class="hero" aria-labelledby="hero-title">
           <div>
-            <h1 id="hero-title">Repérez jusqu’à 50 entreprises qui ont une <span>raison d’acheter maintenant.</span></h1>
-            <p>Choisissez une activité et une zone géographique. SignalLead récupère les entreprises françaises actives, mesure leur adéquation commerciale et les classe automatiquement sans dépendre de PageSpeed ou d’Overpass.</p>
+            <h1 id="hero-title">Priorisez les entreprises locales avec le <span>meilleur potentiel d’achat.</span></h1>
+            <p>SignalLead cible les métiers qui dépendent fortement de leur visibilité locale, écarte les structures sans budget évident et classe les entreprises selon leur taille, leur ancienneté, leurs établissements, leur statut employeur et leurs données financières publiques.</p>
           </div>
-          <div class="score-preview" aria-label="Exemple de score de potentiel commercial : 87 sur 100">
+          <div class="score-preview" aria-label="Exemple de priorité commerciale : 87 sur 100">
             <div class="score-ring"><strong>87<small>/100</small></strong></div>
           </div>
         </section>
@@ -62,9 +61,9 @@
             <div class="panel-heading">
               <div>
                 <h2 id="search-title">Définir la recherche</h2>
-                <p>Aucune URL à saisir : les entreprises sont trouvées automatiquement.</p>
+                <p>Les entreprises actives sont trouvées automatiquement autour de la zone choisie.</p>
               </div>
-              <span class="mode-badge">Données officielles</span>
+              <span class="mode-badge">Associations exclues</span>
             </div>
 
             <form id="search-form">
@@ -74,18 +73,12 @@
               </div>
 
               <div class="field">
-                <label for="target">À qui ?</label>
-                <input id="target" name="target" type="text" maxlength="120" required value="Artisans et petites entreprises" autocomplete="off">
-              </div>
-
-              <div class="field">
-                <label for="category">Catégorie d’entreprise</label>
+                <label for="target">Segment ciblé</label>
                 <select id="category" name="category">
-                  <option value="artisans">Artisans et TPE</option>
-                  <option value="commerces">Commerces</option>
-                  <option value="restaurants">Restaurants et cafés</option>
-                  <option value="sante">Santé de proximité</option>
-                  <option value="services">Services locaux</option>
+                  <option value="fastfood" selected>Fast-foods, kebabs et restauration rapide</option>
+                  <option value="restaurants">Restaurants traditionnels et cafétérias</option>
+                  <option value="food">Toute la restauration</option>
+                  <option value="building">Entreprises du bâtiment</option>
                 </select>
               </div>
 
@@ -117,7 +110,7 @@
 
               <button class="launch-button" id="launch" type="submit">Trouver et classer les entreprises</button>
               <div class="progress-track" aria-hidden="true"><span id="progress"></span></div>
-              <p class="form-help" id="progress-text">Le score utilise la date de création, la taille, l’implantation locale et le statut administratif. Les coordonnées web restent à vérifier.</p>
+              <p class="form-help" id="progress-text">Le score ne suppose pas qu’un site est mauvais : il évalue d’abord la capacité et l’intérêt commercial de l’entreprise.</p>
             </form>
           </section>
 
@@ -129,10 +122,28 @@
               </div>
               <div class="toolbar-controls">
                 <label class="visually-hidden" for="filter">Filtrer les prospects</label>
-                <input id="filter" type="search" maxlength="120" placeholder="Filtrer les prospects">
+                <input id="filter" type="search" maxlength="120" placeholder="Nom, activité, ville…">
+
+                <label class="visually-hidden" for="budget-filter">Filtrer par budget</label>
+                <select id="budget-filter">
+                  <option value="all">Tous les budgets</option>
+                  <option value="high">Budget fort</option>
+                  <option value="medium">Budget moyen ou fort</option>
+                </select>
+
+                <label class="visually-hidden" for="website-filter">Filtrer par site</label>
+                <select id="website-filter">
+                  <option value="all">Tous les sites</option>
+                  <option value="known">Site renseigné</option>
+                  <option value="unknown">Site à rechercher</option>
+                </select>
+
                 <label class="visually-hidden" for="sort">Trier les prospects</label>
                 <select id="sort">
-                  <option value="score">Score décroissant</option>
+                  <option value="score">Priorité décroissante</option>
+                  <option value="budget">Budget estimé</option>
+                  <option value="revenue">Chiffre d’affaires public</option>
+                  <option value="employees">Effectif décroissant</option>
                   <option value="recent">Création la plus récente</option>
                   <option value="name">Nom alphabétique</option>
                 </select>
@@ -144,18 +155,29 @@
 
         <section class="panel method-panel" aria-labelledby="method-title">
           <div>
-            <h2 id="method-title">Ce que le MVP mesure réellement</h2>
-            <p>La recherche utilise l’endpoint géographique officiel de l’API Recherche d’entreprises. Le score ne prétend pas être un audit Lighthouse ou une preuve qu’un site est absent.</p>
+            <h2 id="method-title">Site, aperçu et technologies</h2>
+            <p>L’Annuaire des Entreprises ne fournit pas le site internet. Chaque fiche permet donc de rechercher puis d’enregistrer l’URL vérifiée. Une prévisualisation sécurisée est disponible ; certains sites peuvent la bloquer avec leurs propres en-têtes de sécurité.</p>
           </div>
           <ul>
-            <li>Entreprise active, activité principale, date de création, nombre d’établissements, taille estimée et implantation locale.</li>
-            <li>Classement déterministe avec données SIREN/SIRET visibles et niveau de confiance.</li>
-            <li>Bouton de recherche externe pour vérifier le site et les coordonnées avant toute prospection.</li>
-            <li>Aucune clé API, aucun secret, aucun envoi automatique de messages et aucun HTML distant injecté.</li>
+            <li>Le type de technologie n’est jamais inventé : WordPress, Wix, React ou autre restent « non analysés » sans backend.</li>
+            <li>L’analyse automatique fiable nécessitera un service serveur protégé contre le SSRF, avec récupération HTML, en-têtes HTTP, détection de technologies et capture d’écran.</li>
+            <li>Les coordonnées SIREN/SIRET, la taille, le chiffre d’affaires public et les indicateurs de budget restent visibles pour qualifier le prospect.</li>
           </ul>
         </section>
       </main>
     </div>
   </div>
+
+  <dialog class="preview-dialog" id="site-preview-dialog" aria-labelledby="preview-title">
+    <div class="preview-header">
+      <div>
+        <h2 id="preview-title">Aperçu du site</h2>
+        <p id="preview-url"></p>
+      </div>
+      <button class="secondary-button" id="close-preview" type="button">Fermer</button>
+    </div>
+    <div class="preview-warning">Aperçu isolé dans une sandbox. Si le site refuse l’intégration, utilise le bouton « Ouvrir le site ».</div>
+    <iframe id="site-preview-frame" title="Aperçu sécurisé du site du prospect" sandbox="allow-forms allow-scripts allow-popups" referrerpolicy="no-referrer" loading="lazy"></iframe>
+  </dialog>
 </body>
 </html>
