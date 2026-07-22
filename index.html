@@ -4,10 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#070b17">
-  <meta name="description" content="SignalLead AI classe automatiquement les entreprises locales selon leurs opportunités commerciales publiques.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://www.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org https://overpass-api.de https://overpass.kumi.systems; font-src 'self'; upgrade-insecure-requests">
-  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="SignalLead AI classe automatiquement les entreprises locales selon leur potentiel commercial à partir de données publiques officielles.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://www.openstreetmap.org; connect-src 'self' https://nominatim.openstreetmap.org https://recherche-entreprises.api.gouv.fr; font-src 'self'; upgrade-insecure-requests">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>SignalLead AI — Prospection locale intelligente</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b17'/%3E%3Cpath d='M15 42V22h8l9 12 9-12h8v20h-8V34l-9 11-9-11v8z' fill='%23a970ff'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
   <script src="app.js" defer></script>
 </head>
@@ -27,8 +28,9 @@
       </nav>
 
       <section class="source-card" aria-labelledby="source-title">
-        <strong id="source-title">Sources publiques</strong>
-        <p>Entreprises issues d’OpenStreetMap. Les informations doivent être vérifiées avant tout contact.</p>
+        <strong id="source-title">Sources publiques officielles</strong>
+        <p>Entreprises issues de l’Annuaire des Entreprises et de l’INSEE. Géolocalisation de la zone par OpenStreetMap.</p>
+        <a href="https://annuaire-entreprises.data.gouv.fr/" target="_blank" rel="noopener noreferrer">Annuaire des Entreprises</a><br>
         <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">© contributeurs OpenStreetMap</a>
       </section>
     </aside>
@@ -37,7 +39,7 @@
       <header class="topbar">
         <div>
           <strong>Détection d’opportunités commerciales</strong>
-          <small>Classement explicable, sans dépendance obligatoire à PageSpeed</small>
+          <small>Classement explicable à partir du registre officiel des entreprises françaises</small>
         </div>
         <button class="secondary-button" id="export-button" type="button">Exporter en CSV</button>
       </header>
@@ -48,9 +50,9 @@
         <section class="hero" aria-labelledby="hero-title">
           <div>
             <h1 id="hero-title">Repérez jusqu’à 50 entreprises qui ont une <span>raison d’acheter maintenant.</span></h1>
-            <p>Choisissez une activité et une zone géographique. SignalLead récupère les entreprises publiques, détecte les lacunes de présence numérique vérifiables et les classe automatiquement.</p>
+            <p>Choisissez une activité et une zone géographique. SignalLead récupère les entreprises françaises actives, mesure leur adéquation commerciale et les classe automatiquement sans dépendre de PageSpeed ou d’Overpass.</p>
           </div>
-          <div class="score-preview" aria-label="Exemple de score d’opportunité : 87 sur 100">
+          <div class="score-preview" aria-label="Exemple de score de potentiel commercial : 87 sur 100">
             <div class="score-ring"><strong>87<small>/100</small></strong></div>
           </div>
         </section>
@@ -62,7 +64,7 @@
                 <h2 id="search-title">Définir la recherche</h2>
                 <p>Aucune URL à saisir : les entreprises sont trouvées automatiquement.</p>
               </div>
-              <span class="mode-badge">Recherche réelle</span>
+              <span class="mode-badge">Données officielles</span>
             </div>
 
             <form id="search-form">
@@ -115,7 +117,7 @@
 
               <button class="launch-button" id="launch" type="submit">Trouver et classer les entreprises</button>
               <div class="progress-track" aria-hidden="true"><span id="progress"></span></div>
-              <p class="form-help" id="progress-text">Le score est calculé à partir de données publiques réellement disponibles. Aucun score Lighthouse n’est inventé.</p>
+              <p class="form-help" id="progress-text">Le score utilise la date de création, la taille, l’implantation locale et le statut administratif. Les coordonnées web restent à vérifier.</p>
             </form>
           </section>
 
@@ -131,7 +133,7 @@
                 <label class="visually-hidden" for="sort">Trier les prospects</label>
                 <select id="sort">
                   <option value="score">Score décroissant</option>
-                  <option value="website-missing">Sans site en premier</option>
+                  <option value="recent">Création la plus récente</option>
                   <option value="name">Nom alphabétique</option>
                 </select>
               </div>
@@ -143,13 +145,13 @@
         <section class="panel method-panel" aria-labelledby="method-title">
           <div>
             <h2 id="method-title">Ce que le MVP mesure réellement</h2>
-            <p>Cette version GitHub Pages fonctionne entièrement côté navigateur. Elle ne contourne pas les protections CORS des sites tiers et ne prétend donc pas effectuer un audit technique profond sans backend.</p>
+            <p>La recherche utilise l’endpoint géographique officiel de l’API Recherche d’entreprises. Le score ne prétend pas être un audit Lighthouse ou une preuve qu’un site est absent.</p>
           </div>
           <ul>
-            <li>Présence ou absence d’un site public, téléphone, email, horaires, description et réseaux sociaux.</li>
-            <li>Classement déterministe avec preuves visibles et niveau de confiance.</li>
-            <li>URLs externes limitées à HTTP/HTTPS, hôtes locaux et réseaux privés bloqués.</li>
-            <li>Aucune clé API, aucun secret, aucun envoi automatique de messages et aucun HTML externe injecté.</li>
+            <li>Entreprise active, activité principale, date de création, nombre d’établissements, taille estimée et implantation locale.</li>
+            <li>Classement déterministe avec données SIREN/SIRET visibles et niveau de confiance.</li>
+            <li>Bouton de recherche externe pour vérifier le site et les coordonnées avant toute prospection.</li>
+            <li>Aucune clé API, aucun secret, aucun envoi automatique de messages et aucun HTML distant injecté.</li>
           </ul>
         </section>
       </main>
