@@ -1,42 +1,63 @@
-# SignalLead AI — MVP public
+# SignalLead
 
-SignalLead AI recherche des entreprises locales, analyse leurs sites avec Lighthouse, calcule un score d'opportunité explicable et prépare un message de prise de contact fondé sur les faits détectés.
+SignalLead recherche des entreprises locales, exclut les structures peu accessibles commercialement, découvre automatiquement leurs sites et classe les prospects selon deux dimensions distinctes :
 
-## Fonctionnalités
+1. capacité et accessibilité commerciale de l’entreprise ;
+2. besoin réel de création ou de refonte du site.
 
-- recherche géographique via OpenStreetMap ;
-- saisie manuelle d'URLs ;
-- analyse PageSpeed Insights mobile ;
-- scoring déterministe avec niveau de confiance ;
-- preuves et signaux lisibles ;
-- génération de message contrôlée ;
-- Prompt API locale de Chrome/Edge lorsque disponible ;
-- statuts prospect ;
-- export CSV et impression PDF ;
-- stockage local versionné ;
-- interface responsive et accessible.
+La priorité finale n’est calculée qu’après découverte et analyse du site, ou confirmation vérifiée de son absence.
 
-## Lancer localement
+## Ciblage actuel
 
-```bash
-npm run dev
-```
-
-Puis ouvrir `http://localhost:4173`.
-
-## Vérifications
-
-```bash
-npm run check
-npm test
-```
-
-## Limites du MVP
-
-Le service public Nominatim impose un maximum absolu d'une requête par seconde et demande une attribution. PageSpeed fonctionne sans clé pour de faibles volumes mais une clé est recommandée pour des appels fréquents. La version commerciale devra donc utiliser un backend, des quotas, une file de jobs et des fournisseurs adaptés.
-
-Aucun email n'est envoyé automatiquement. Les informations publiques doivent être vérifiées avant toute prise de contact.
+- fast-foods, kebabs et restauration rapide ;
+- restaurants ;
+- entreprises du bâtiment ;
+- associations et organismes publics exclus ;
+- grandes structures, ETI, groupes de plus de 50 salariés, réseaux de plus de 10 établissements et sociétés dépassant 20 M€ de chiffre d’affaires exclus du parcours standard.
 
 ## Architecture
 
-Voir [`docs/ADR-001-mvp-architecture.md`](./docs/ADR-001-mvp-architecture.md).
+- frontend statique : GitHub Pages ou Vercel ;
+- registre d’entreprises : API Recherche d’entreprises ;
+- géolocalisation : Nominatim ;
+- découverte automatique : Google Places API (New), appelée uniquement depuis le backend ;
+- audit : capture et métriques via Microlink pour le MVP ;
+- backend : Vercel Function `api/enrich-businesses.js` ;
+- persistance du MVP : stockage local versionné.
+
+## Déploiement recommandé
+
+Le projet complet doit être déployé sur Vercel afin que `/api/enrich-businesses` fonctionne.
+
+1. importer le dépôt GitHub dans Vercel ;
+2. activer Places API (New) dans Google Cloud ;
+3. créer une clé API restreinte à Places API (New) ;
+4. ajouter dans Vercel :
+
+```text
+GOOGLE_PLACES_API_KEY=<clé serveur>
+ALLOWED_ORIGINS=https://owarino777.github.io,https://signal-lead-ai.vercel.app
+```
+
+5. redéployer le projet.
+
+La clé Google ne doit jamais être placée dans `index.html`, `app.js`, `enrichment.js` ou un dépôt public.
+
+## Sécurité du backend
+
+- clé conservée dans les variables d’environnement Vercel ;
+- liste blanche d’origines ;
+- requêtes POST uniquement ;
+- limite de dix entreprises par appel ;
+- limitation du débit ;
+- timeouts ;
+- validation et limitation des entrées ;
+- aucune injection HTML distante ;
+- cache court pour limiter les coûts Google.
+
+## Limites actuelles
+
+- Google Places est facturé selon l’utilisation ;
+- les correspondances entreprise/fiche Google utilisent un score de confiance et peuvent nécessiter une correction exceptionnelle ;
+- l’audit Microlink est adapté à la validation du MVP, pas à un produit commercial à fort volume ;
+- un backend Chromium/Lighthouse isolé devra remplacer l’audit externe pour la version commerciale.
