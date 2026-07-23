@@ -158,51 +158,37 @@ async function lookupBusinessInNominatim(item) {
   }
 }
 
-fetchWebsiteContent = async function fetchWebsiteContentPatched(url) {
+fetchWebsiteContent = async function fetchWebsiteContentFromStaticFrontend(url) {
   const normalized = normalizeUrl(url);
   if (!normalized) throw new Error("URL invalide.");
 
-  const allOriginsUrl = `${CONFIG.allOriginsEndpoint}?${new URLSearchParams({ url: normalized })}`;
-  try {
-    const response = await fetchWithTimeout(
-      allOriginsUrl,
-      { headers: { Accept: "text/html,text/plain;q=0.9" } },
-      FAST_ENRICHMENT.websiteTimeoutMs
-    );
-    if (response.ok) {
-      const html = await response.text();
-      if (html.length > 100) {
-        return {
-          content: html.slice(0, 1_500_000),
-          format: /<!doctype html|<html[\s>]/i.test(html) ? "html" : "text",
-          source: "AllOrigins"
-        };
-      }
-    }
-  } catch {
-    // Continue with the text reader fallback.
-  }
-
-  const readerUrl = `${CONFIG.jinaEndpoint}${normalized.replace(/^https?:\/\//i, "")}`;
+  const proxyUrl = `${CONFIG.allOriginsEndpoint}?${new URLSearchParams({ url: normalized })}`;
   const response = await fetchWithTimeout(
-    readerUrl,
-    { headers: { Accept: "text/plain" } },
+    proxyUrl,
+    { headers: { Accept: "text/html,text/plain;q=0.9" } },
     FAST_ENRICHMENT.websiteTimeoutMs
   );
-  if (!response.ok) throw new Error(`Lecture du site indisponible (${response.status}).`);
-  const text = await response.text();
-  if (text.length < 80) throw new Error("Contenu du site insuffisant.");
+
+  if (!response.ok) {
+    throw new Error(`Le site a été trouvé, mais son HTML n’est pas accessible depuis GitHub Pages (${response.status}).`);
+  }
+
+  const html = await response.text();
+  if (html.length < 100) {
+    throw new Error("Le site a été trouvé, mais le contenu reçu est insuffisant pour un audit fiable.");
+  }
+
   return {
-    content: text.slice(0, 800_000),
-    format: "text",
-    source: "Jina Reader"
+    content: html.slice(0, 1_500_000),
+    format: /<!doctype html|<html[\s>]/i.test(html) ? "html" : "text",
+    source: "Proxy HTML public"
   };
 };
 
 getSiteStatus = function getVerifiedSiteStatus(item) {
   if (item.noSiteConfirmed) return { label: "Aucun site confirmé", className: "bad" };
   if (item.audit) return { label: "Site trouvé et analysé", className: "good" };
-  if (item.website && item.auditStatus === "failed") return { label: "Site trouvé, analyse impossible", className: "neutral" };
+  if (item.website && item.auditStatus === "failed") return { label: "Site trouvé, audit indisponible", className: "neutral" };
   if (item.website) return { label: "Site trouvé automatiquement", className: "neutral" };
   if (item.websiteDiscoveryStatus === "place_without_website") {
     return { label: "Établissement trouvé, site non renseigné", className: "pending" };
@@ -257,7 +243,9 @@ enrichProspects = async function enrichProspectsWithNominatim(items) {
   if (auditable.length) {
     let completed = 0;
     await mapWithConcurrency(auditable, FAST_ENRICHMENT.auditConcurrency, async (item) => {
+      item.auditStatus = "running";
       await auditWebsite(item);
+      if (!item.audit) item.auditStatus = "failed";
       updatePriority(item);
       completed += 1;
       setProgress(
