@@ -2,819 +2,378 @@
 
 const CONFIG = Object.freeze({
   maxResults: 50,
-  maxSourceResults: 100,
   maxRadiusKm: 50,
-  requestTimeoutMs: 20000,
-  storageKey: "signalLead.v4.items",
-  storageVersion: 4,
+  requestTimeoutMs: 22000,
+  auditTimeoutMs: 60000,
+  storageKey: "signalLead.v5.items",
+  storageVersion: 5,
   nominatimEndpoint: "https://nominatim.openstreetmap.org/search",
-  companyEndpoint: "https://recherche-entreprises.api.gouv.fr/near_point"
+  companyEndpoint: "https://recherche-entreprises.api.gouv.fr/near_point",
+  microlinkEndpoint: "https://api.microlink.io/"
 });
 
 const SEGMENTS = Object.freeze({
-  fastfood: Object.freeze({
-    label: "Restauration rapide",
-    activityCodes: Object.freeze(["56.10C"]),
-    commercialReason: "la commande en ligne, la visibilité locale et la conversion mobile sont déterminantes"
-  }),
-  restaurants: Object.freeze({
-    label: "Restaurants",
-    activityCodes: Object.freeze(["56.10A", "56.10B"]),
-    commercialReason: "la réservation, les menus, les avis et la visibilité locale influencent directement le chiffre d’affaires"
-  }),
-  food: Object.freeze({
-    label: "Restauration",
-    activityCodes: Object.freeze(["56.10A", "56.10B", "56.10C"]),
-    commercialReason: "la présence locale, la réservation et la commande en ligne sont des leviers commerciaux importants"
-  }),
-  building: Object.freeze({
-    label: "Bâtiment",
-    sectionCode: "F",
-    commercialReason: "la confiance, les réalisations, les avis et les demandes de devis sont décisifs"
-  })
+  fastfood: Object.freeze({ label: "Restauration rapide", activityCodes: Object.freeze(["56.10C"]), need: "la commande en ligne et la conversion mobile" }),
+  restaurants: Object.freeze({ label: "Restaurant", activityCodes: Object.freeze(["56.10A", "56.10B"]), need: "les réservations, les menus et la visibilité locale" }),
+  food: Object.freeze({ label: "Restauration", activityCodes: Object.freeze(["56.10A", "56.10B", "56.10C"]), need: "la réservation, la commande et la visibilité locale" }),
+  building: Object.freeze({ label: "Bâtiment", sectionCode: "F", need: "les réalisations, les avis et les demandes de devis" })
 });
 
-const STATUS_LABELS = Object.freeze({
-  new: "Nouveau",
-  contacted: "Contacté",
-  replied: "Répondu",
-  won: "Gagné",
-  ignored: "Ignoré"
-});
-
+const STATUS_LABELS = Object.freeze({ new: "Nouveau", contacted: "Contacté", replied: "Répondu", won: "Gagné", ignored: "Ignoré" });
 const ASSOCIATION_LEGAL_CODES = new Set(["9210", "9220", "9221", "9222", "9230", "9240", "9260"]);
 const PUBLIC_LEGAL_CODE_PREFIXES = Object.freeze(["71", "72", "73", "74"]);
+const MANUAL_WEIGHTS = Object.freeze({ datedDesign: 14, poorMobile: 16, weakConversion: 18, weakTrust: 10, confusingNavigation: 10, siteGood: -45 });
 
 const dom = Object.freeze({
-  form: document.querySelector("#search-form"),
-  service: document.querySelector("#service"),
-  category: document.querySelector("#category"),
-  location: document.querySelector("#location"),
-  radius: document.querySelector("#radius"),
-  resultLimit: document.querySelector("#result-limit"),
-  launch: document.querySelector("#launch"),
-  progress: document.querySelector("#progress"),
-  progressText: document.querySelector("#progress-text"),
-  results: document.querySelector("#results"),
-  count: document.querySelector("#result-count"),
-  filter: document.querySelector("#filter"),
-  budgetFilter: document.querySelector("#budget-filter"),
-  websiteFilter: document.querySelector("#website-filter"),
-  sort: document.querySelector("#sort"),
-  notice: document.querySelector("#notice"),
-  exportButton: document.querySelector("#export-button"),
-  newSearch: document.querySelector("#new-search"),
-  previewDialog: document.querySelector("#site-preview-dialog"),
-  previewFrame: document.querySelector("#site-preview-frame"),
-  previewUrl: document.querySelector("#preview-url"),
-  closePreview: document.querySelector("#close-preview")
+  form: document.querySelector("#search-form"), service: document.querySelector("#service"), category: document.querySelector("#category"), location: document.querySelector("#location"), radius: document.querySelector("#radius"), resultLimit: document.querySelector("#result-limit"), launch: document.querySelector("#launch"), progress: document.querySelector("#progress"), progressText: document.querySelector("#progress-text"), results: document.querySelector("#results"), emptyState: document.querySelector("#empty-state"), count: document.querySelector("#result-count"), filter: document.querySelector("#filter"), qualificationFilter: document.querySelector("#qualification-filter"), sort: document.querySelector("#sort"), notice: document.querySelector("#notice"), exportButton: document.querySelector("#export-button"), newSearch: document.querySelector("#new-search"), summaryTotal: document.querySelector("#summary-total"), summaryAudited: document.querySelector("#summary-audited"), summaryHigh: document.querySelector("#summary-high"), summaryPending: document.querySelector("#summary-pending"),
+  dialog: document.querySelector("#prospect-dialog"), dialogTitle: document.querySelector("#dialog-title"), dialogSubtitle: document.querySelector("#dialog-subtitle"), dialogSegment: document.querySelector("#dialog-segment"), closeDialog: document.querySelector("#close-dialog"), dialogBusinessScore: document.querySelector("#dialog-business-score"), dialogSiteScore: document.querySelector("#dialog-site-score"), dialogMetrics: document.querySelector("#dialog-metrics"), dialogBusinessEvidence: document.querySelector("#dialog-business-evidence"), siteUrl: document.querySelector("#site-url"), findSite: document.querySelector("#find-site"), saveSite: document.querySelector("#save-site"), auditSite: document.querySelector("#audit-site"), noSiteConfirmed: document.querySelector("#no-site-confirmed"), websitePreview: document.querySelector("#website-preview"), auditMetrics: document.querySelector("#audit-metrics"), technologyList: document.querySelector("#technology-list"), manualReview: document.querySelector(".manual-review"), prospectStatus: document.querySelector("#prospect-status"), contactMessage: document.querySelector("#contact-message"), copyMessage: document.querySelector("#copy-message"), openSite: document.querySelector("#open-site"), saveProspect: document.querySelector("#save-prospect")
 });
 
-const state = {
-  items: loadStoredItems(),
-  noticeTimer: null,
-  isLoading: false
-};
+const state = { items: loadItems(), selectedId: null, isLoading: false, noticeTimer: null };
 
-function sanitizePlainText(value, maxLength = 180) {
-  return String(value ?? "")
-    .replace(/[\u0000-\u001F\u007F]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, maxLength);
-}
+function sanitizeText(value, max = 200) { return String(value ?? "").replace(/[\u0000-\u001F\u007F]/g, " ").replace(/\s+/g, " ").trim().slice(0, max); }
+function firstDefined(...values) { return values.find((value) => value !== undefined && value !== null && value !== ""); }
+function clamp(value, min = 0, max = 100) { return Math.max(min, Math.min(max, Math.round(Number(value) || 0))); }
+function normalizeScore(value) { const number = Number(value); if (!Number.isFinite(number)) return null; return clamp(number <= 1 ? number * 100 : number); }
 
-function loadStoredItems() {
+function loadItems() {
   try {
-    const raw = localStorage.getItem(CONFIG.storageKey);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    if (!parsed || parsed.version !== CONFIG.storageVersion || !Array.isArray(parsed.items)) return [];
-    return parsed.items.filter(isStoredProspectValid).slice(0, CONFIG.maxResults);
-  } catch {
-    return [];
-  }
+    const parsed = JSON.parse(localStorage.getItem(CONFIG.storageKey) || "null");
+    return parsed?.version === CONFIG.storageVersion && Array.isArray(parsed.items) ? parsed.items.filter(isValidItem).slice(0, CONFIG.maxResults) : [];
+  } catch { return []; }
 }
-
-function isStoredProspectValid(item) {
-  return Boolean(
-    item &&
-    typeof item.id === "string" &&
-    typeof item.name === "string" &&
-    Number.isFinite(item.score) &&
-    item.score >= 0 &&
-    item.score <= 100
-  );
-}
-
+function isValidItem(item) { return Boolean(item && typeof item.id === "string" && typeof item.name === "string" && Number.isFinite(item.businessScore)); }
 function persistItems() {
-  try {
-    localStorage.setItem(CONFIG.storageKey, JSON.stringify({
-      version: CONFIG.storageVersion,
-      savedAt: new Date().toISOString(),
-      items: state.items.slice(0, CONFIG.maxResults)
-    }));
-  } catch {
-    showNotice("Le navigateur n’a pas pu sauvegarder les résultats localement.", "warning");
-  }
+  try { localStorage.setItem(CONFIG.storageKey, JSON.stringify({ version: CONFIG.storageVersion, savedAt: new Date().toISOString(), items: state.items })); }
+  catch { showNotice("Impossible d’enregistrer les résultats dans ce navigateur.", "warning"); }
 }
-
 function showNotice(message, kind = "info") {
-  window.clearTimeout(state.noticeTimer);
-  dom.notice.textContent = sanitizePlainText(message, 400);
+  clearTimeout(state.noticeTimer);
+  dom.notice.textContent = sanitizeText(message, 500);
   dom.notice.dataset.kind = kind;
   dom.notice.hidden = false;
-  state.noticeTimer = window.setTimeout(() => {
-    dom.notice.hidden = true;
-  }, 7000);
+  state.noticeTimer = setTimeout(() => { dom.notice.hidden = true; }, 7000);
 }
-
-function setProgress(percent, message) {
-  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
-  dom.progress.style.width = `${safePercent}%`;
-  dom.progressText.textContent = message;
-}
-
-function setLoading(isLoading) {
-  state.isLoading = isLoading;
-  dom.launch.disabled = isLoading;
-  dom.launch.textContent = isLoading ? "Recherche en cours…" : "Trouver et classer les entreprises";
-}
-
-function normalizeExternalUrl(value) {
-  if (!value) return null;
-  try {
-    const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
-    const url = new URL(candidate);
-    if (!['http:', 'https:'].includes(url.protocol)) return null;
-    if (isBlockedHostname(url.hostname)) return null;
-    url.username = "";
-    url.password = "";
-    url.hash = "";
-    return url.href.slice(0, 2048);
-  } catch {
-    return null;
-  }
-}
+function setProgress(percent, message) { dom.progress.style.width = `${clamp(percent)}%`; dom.progressText.textContent = message; }
+function setLoading(value) { state.isLoading = value; dom.launch.disabled = value; dom.launch.textContent = value ? "Recherche en cours…" : "Lancer la recherche"; }
 
 function isBlockedHostname(hostname) {
   const host = String(hostname).toLowerCase().replace(/\.$/, "");
   if (!host || host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local")) return true;
   if (/^(0|10|127)\./.test(host) || /^192\.168\./.test(host)) return true;
-  const match172 = host.match(/^172\.(\d{1,3})\./);
-  if (match172 && Number(match172[1]) >= 16 && Number(match172[1]) <= 31) return true;
-  if (host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:")) return true;
-  return false;
+  const match = host.match(/^172\.(\d{1,3})\./);
+  if (match && Number(match[1]) >= 16 && Number(match[1]) <= 31) return true;
+  return host === "::1" || host.startsWith("fc") || host.startsWith("fd") || host.startsWith("fe80:");
 }
-
-async function fetchJson(url) {
-  const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), CONFIG.requestTimeoutMs);
+function normalizeUrl(value) {
+  if (!value) return null;
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      signal: controller.signal,
-      credentials: "omit",
-      cache: "no-store",
-      redirect: "follow",
-      referrerPolicy: "strict-origin-when-cross-origin",
-      headers: { Accept: "application/json" }
-    });
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
+    if (!["http:", "https:"].includes(url.protocol) || isBlockedHostname(url.hostname)) return null;
+    url.username = ""; url.password = ""; url.hash = "";
+    return url.href.slice(0, 2048);
+  } catch { return null; }
+}
+async function fetchJson(url, timeoutMs = CONFIG.requestTimeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, { signal: controller.signal, credentials: "omit", cache: "no-store", redirect: "follow", referrerPolicy: "strict-origin-when-cross-origin", headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error(`Service distant indisponible (${response.status}).`);
-    const contentType = response.headers.get("content-type") || "";
-    if (!contentType.includes("application/json")) throw new Error("Réponse distante inattendue.");
     return await response.json();
   } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw new Error("Le service distant a dépassé le délai autorisé.");
-    }
+    if (error instanceof DOMException && error.name === "AbortError") throw new Error("Le service a dépassé le délai autorisé.");
     throw error;
-  } finally {
-    window.clearTimeout(timeout);
-  }
+  } finally { clearTimeout(timeout); }
 }
 
 async function geocodeLocation(location) {
-  const query = sanitizePlainText(location, 120);
-  if (query.length < 2) throw new Error("La zone géographique est trop courte.");
-  const params = new URLSearchParams({
-    q: query,
-    format: "jsonv2",
-    limit: "1",
-    addressdetails: "1",
-    countrycodes: "fr"
-  });
+  const query = sanitizeText(location, 120);
+  const params = new URLSearchParams({ q: query, format: "jsonv2", limit: "1", addressdetails: "1", countrycodes: "fr" });
   const data = await fetchJson(`${CONFIG.nominatimEndpoint}?${params}`);
   const result = Array.isArray(data) ? data[0] : null;
   if (!result) throw new Error("Zone introuvable en France.");
-  const latitude = Number(result.lat);
-  const longitude = Number(result.lon);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new Error("Coordonnées invalides.");
-  return {
-    latitude,
-    longitude,
-    label: sanitizePlainText(result.display_name, 200)
-  };
+  const latitude = Number(result.lat); const longitude = Number(result.lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) throw new Error("Coordonnées géographiques invalides.");
+  return { latitude, longitude, label: sanitizeText(result.display_name, 200) };
 }
-
-function buildCompanySearchUrl({ geo, radiusKm, segment, page }) {
-  const params = new URLSearchParams({
-    lat: geo.latitude.toFixed(6),
-    long: geo.longitude.toFixed(6),
-    radius: String(Math.max(1, Math.min(CONFIG.maxRadiusKm, radiusKm))),
-    page: String(page),
-    per_page: "25",
-    etat_administratif: "A",
-    include: "siege,complements,finances,matching_etablissements"
-  });
-  if (segment.sectionCode) {
-    params.set("section_activite_principale", segment.sectionCode);
-  } else {
-    params.set("activite_principale", segment.activityCodes.join(","));
-  }
+function buildCompanyUrl({ geo, radiusKm, segment, page }) {
+  const params = new URLSearchParams({ lat: geo.latitude.toFixed(6), long: geo.longitude.toFixed(6), radius: String(Math.min(CONFIG.maxRadiusKm, Math.max(1, radiusKm))), page: String(page), per_page: "25", etat_administratif: "A" });
+  if (segment.sectionCode) params.set("section_activite_principale", segment.sectionCode);
+  else params.set("activite_principale", segment.activityCodes.join(","));
   return `${CONFIG.companyEndpoint}?${params}`;
 }
-
-function getCompanyResults(data) {
-  if (Array.isArray(data?.results)) return data.results;
-  if (Array.isArray(data?.resultats)) return data.resultats;
-  return [];
-}
-
+function getResults(data) { return Array.isArray(data?.results) ? data.results : Array.isArray(data?.resultats) ? data.resultats : []; }
 async function fetchCompanies(formData, geo) {
   const segment = SEGMENTS[formData.category];
-  const requestedPages = formData.limit <= 25 ? 2 : 4;
-  const pageNumbers = Array.from({ length: requestedPages }, (_, index) => index + 1);
-  const responses = await Promise.all(pageNumbers.map((page) => fetchJson(buildCompanySearchUrl({
-    geo,
-    radiusKm: formData.radiusKm,
-    segment,
-    page
-  }))));
-  return responses.flatMap(getCompanyResults).slice(0, CONFIG.maxSourceResults);
+  const pages = formData.limit > 25 ? [1, 2] : [1];
+  const responses = await Promise.all(pages.map((page) => fetchJson(buildCompanyUrl({ geo, radiusKm: formData.radiusKm, segment, page }))));
+  return responses.flatMap(getResults);
 }
 
-function firstDefined(...values) {
-  return values.find((value) => value !== undefined && value !== null && value !== "");
-}
-
-function normalizeLegalCode(value) {
-  return sanitizePlainText(value, 8).replace(/\D/g, "");
-}
-
-function isExcludedOrganization(company) {
+function normalizeLegalCode(value) { return sanitizeText(value, 8).replace(/\D/g, ""); }
+function isExcluded(company) {
   const complements = company?.complements || {};
   const legalCode = normalizeLegalCode(firstDefined(company?.nature_juridique, company?.nature_juridique_unite_legale));
-  const legalLabel = sanitizePlainText(firstDefined(company?.libelle_nature_juridique, company?.nature_juridique_libelle), 180).toLowerCase();
-  const name = sanitizePlainText(firstDefined(company?.nom_complet, company?.nom_raison_sociale, company?.sigle), 200).toLowerCase();
-  const isAssociation = complements.est_association === true || ASSOCIATION_LEGAL_CODES.has(legalCode) || legalLabel.includes("association");
-  const isPublic = PUBLIC_LEGAL_CODE_PREFIXES.some((prefix) => legalCode.startsWith(prefix)) || /commune|département|région|établissement public|administration/.test(legalLabel);
-  const obviousAssociationName = /(^|\s)(association|amicale|club|comité|fédération)(\s|$)/.test(name);
-  return isAssociation || isPublic || obviousAssociationName;
+  const legalLabel = sanitizeText(firstDefined(company?.libelle_nature_juridique, company?.nature_juridique_libelle), 180).toLowerCase();
+  const name = sanitizeText(firstDefined(company?.nom_complet, company?.nom_raison_sociale, company?.sigle), 200).toLowerCase();
+  const association = complements.est_association === true || ASSOCIATION_LEGAL_CODES.has(legalCode) || legalLabel.includes("association") || /(^|\s)(association|amicale|club|comité|fédération)(\s|$)/.test(name);
+  const publicBody = PUBLIC_LEGAL_CODE_PREFIXES.some((prefix) => legalCode.startsWith(prefix)) || /commune|département|région|établissement public|administration/.test(legalLabel);
+  return association || publicBody;
 }
-
-function getHeadOffice(company) {
-  return company?.siege || company?.matching_etablissements?.[0] || company?.etablissement_siege || {};
-}
-
-function getFinancialRecord(company) {
+function getSite(company) { return company?.siege || company?.matching_etablissements?.[0] || company?.etablissement_siege || {}; }
+function getFinancial(company) {
   const finances = company?.finances;
   if (!finances || typeof finances !== "object") return null;
-  const values = Object.entries(finances)
-    .map(([year, record]) => ({ year: Number(year), record }))
-    .filter((entry) => Number.isFinite(entry.year) && entry.record && typeof entry.record === "object")
-    .toSorted((a, b) => b.year - a.year);
-  return values[0] || null;
+  return Object.entries(finances).map(([year, record]) => ({ year: Number(year), record })).filter((entry) => Number.isFinite(entry.year) && entry.record && typeof entry.record === "object").sort((a, b) => b.year - a.year)[0] || null;
 }
-
-function parseMoney(value) {
-  const number = Number(value);
-  return Number.isFinite(number) && number >= 0 ? number : null;
-}
-
+function parseMoney(value) { const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : null; }
 function employeeMidpoint(code) {
-  const value = sanitizePlainText(code, 10).toUpperCase();
-  const map = {
-    "00": 0,
-    "NN": 0,
-    "01": 1,
-    "02": 4,
-    "03": 8,
-    "11": 15,
-    "12": 35,
-    "21": 75,
-    "22": 150,
-    "31": 225,
-    "32": 375,
-    "41": 750,
-    "42": 1500,
-    "51": 3500,
-    "52": 7500,
-    "53": 10000
-  };
-  return map[value] ?? null;
+  return ({ "00": 0, "NN": 0, "01": 1, "02": 4, "03": 8, "11": 15, "12": 35, "21": 75, "22": 150, "31": 225, "32": 375, "41": 750, "42": 1500, "51": 3500, "52": 7500, "53": 10000 })[sanitizeText(code, 10).toUpperCase()] ?? null;
 }
-
 function formatAddress(site) {
   const direct = firstDefined(site?.adresse, site?.adresse_complete);
-  if (direct) return sanitizePlainText(direct, 240);
-  const parts = [
-    [site?.numero_voie, site?.type_voie, site?.libelle_voie].filter(Boolean).join(" "),
-    site?.code_postal,
-    firstDefined(site?.libelle_commune, site?.commune, site?.ville)
-  ].filter(Boolean);
-  return sanitizePlainText(parts.join(", "), 240) || "Adresse non renseignée";
+  if (direct) return sanitizeText(direct, 240);
+  return sanitizeText([[site?.numero_voie, site?.type_voie, site?.libelle_voie].filter(Boolean).join(" "), site?.code_postal, firstDefined(site?.libelle_commune, site?.commune, site?.ville)].filter(Boolean).join(" "), 240) || "Adresse non renseignée";
 }
+function yearsSince(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? null : Math.max(0, (Date.now() - date.getTime()) / 31556952000); }
 
-function yearsSince(dateString) {
-  const date = new Date(dateString);
-  if (Number.isNaN(date.getTime())) return null;
-  return Math.max(0, (Date.now() - date.getTime()) / 31_556_952_000);
-}
-
-function estimateBudget({ revenue, employees, employer, establishmentsOpen, category }) {
-  let points = 0;
+function calculateBusinessFit({ revenue, employees, employer, establishments, ageYears, companyCategory, hasTradeName, segment }) {
+  let score = 24;
   const evidence = [];
-
   if (revenue !== null) {
-    if (revenue >= 2_000_000) { points += 5; evidence.push("CA public supérieur à 2 M€"); }
-    else if (revenue >= 500_000) { points += 4; evidence.push("CA public supérieur à 500 k€"); }
-    else if (revenue >= 150_000) { points += 3; evidence.push("CA public supérieur à 150 k€"); }
-    else { points += 1; evidence.push("CA public disponible mais limité"); }
-  }
+    if (revenue >= 300000 && revenue <= 8000000) { score += 22; evidence.push("Chiffre d’affaires compatible avec une prestation externe"); }
+    else if (revenue > 8000000 && revenue <= 20000000) { score += 12; evidence.push("Capacité d’investissement élevée"); }
+    else if (revenue > 20000000) { score -= 12; evidence.push("Structure importante, décision d’achat probablement complexe"); }
+    else { score += 6; evidence.push("Chiffre d’affaires public limité"); }
+  } else { score += 7; evidence.push("Chiffre d’affaires non publié"); }
 
   if (employees !== null) {
-    if (employees >= 10) { points += 4; evidence.push("Équipe d’au moins 10 salariés estimés"); }
-    else if (employees >= 3) { points += 3; evidence.push("Équipe de plusieurs salariés estimée"); }
-    else if (employees >= 1) { points += 2; evidence.push("Présence salariale estimée"); }
+    if (employees >= 2 && employees <= 20) { score += 20; evidence.push("Taille idéale pour joindre un décideur"); }
+    else if (employees > 20 && employees <= 50) { score += 13; evidence.push("PME structurée avec budget probable"); }
+    else if (employees > 100) { score -= 16; evidence.push("Grande organisation moins accessible commercialement"); }
+    else { score += 6; }
   }
-
-  if (employer === true) { points += 2; evidence.push("Entreprise employeuse"); }
-  if (establishmentsOpen >= 2) { points += 3; evidence.push(`${establishmentsOpen} établissements ouverts`); }
-  if (["PME", "ETI", "GE"].includes(category)) { points += 2; evidence.push(`Catégorie ${category}`); }
-
-  const level = points >= 9 ? "high" : points >= 5 ? "medium" : "low";
-  const label = level === "high" ? "Fort" : level === "medium" ? "Moyen" : "Faible ou inconnu";
-  return { level, label, points, evidence: evidence.slice(0, 4) };
+  if (employer) { score += 7; evidence.push("Statut employeur confirmé"); }
+  if (establishments >= 1 && establishments <= 5) { score += 10; evidence.push("Réseau local de taille accessible"); }
+  else if (establishments > 20) { score -= 14; evidence.push("Réseau important probablement déjà accompagné"); }
+  else if (establishments > 5) { score += 3; }
+  if (ageYears !== null && ageYears >= 1 && ageYears <= 15) { score += 9; evidence.push("Entreprise installée et encore en développement"); }
+  else if (ageYears !== null && ageYears < 1) { score += 3; evidence.push("Entreprise très récente"); }
+  if (hasTradeName) { score += 5; evidence.push("Enseigne commerciale identifiable"); }
+  if (["ETI", "GE"].includes(companyCategory)) { score -= 18; evidence.push(`Catégorie ${companyCategory}, cible moins accessible`); }
+  if (["fastfood", "restaurants", "food", "building"].includes(segment)) score += 6;
+  return { score: clamp(score), evidence: evidence.slice(0, 6) };
 }
-
-function calculateCommercialPriority({ budget, ageYears, establishmentsOpen, employees, employer, hasCommercialName, segment }) {
-  let score = 24;
-  const reasons = [];
-  const strengths = [];
-
-  if (budget.level === "high") { score += 30; reasons.push("Capacité d’investissement estimée forte"); }
-  else if (budget.level === "medium") { score += 19; reasons.push("Capacité d’investissement estimée moyenne"); }
-  else { score += 5; reasons.push("Budget non confirmé par les données publiques"); }
-
-  if (ageYears !== null) {
-    if (ageYears >= 2 && ageYears <= 15) { score += 13; reasons.push("Entreprise établie mais encore en phase de développement"); }
-    else if (ageYears < 2) { score += 8; reasons.push("Entreprise récemment créée"); }
-    else { score += 5; strengths.push("Entreprise ancienne et installée"); }
-  }
-
-  if (establishmentsOpen >= 2) { score += 10; reasons.push("Plusieurs établissements à valoriser"); }
-  if (employees !== null && employees >= 3) { score += 8; reasons.push("Organisation structurée avec salariés"); }
-  if (employer === true) { score += 5; strengths.push("Statut employeur confirmé"); }
-  if (hasCommercialName) { score += 4; strengths.push("Enseigne commerciale identifiée"); }
-  if (segment === "fastfood" || segment === "restaurants") { score += 5; reasons.push("Activité très dépendante de la visibilité locale"); }
-
-  return {
-    score: Math.max(1, Math.min(99, Math.round(score))),
-    reasons: reasons.slice(0, 5),
-    strengths: strengths.slice(0, 3)
-  };
+function createMessage(prospect, service) {
+  const siteSentence = prospect.noSiteConfirmed ? "Je n’ai pas identifié de site officiel à jour." : prospect.siteNeed?.score >= 60 ? "L’analyse de votre site fait ressortir plusieurs pistes concrètes d’amélioration." : "Votre présence numérique peut être examinée afin d’identifier les améliorations réellement rentables.";
+  return ["Bonjour,", "", `Je me permets de vous contacter au sujet de ${prospect.commercialName || prospect.name}.`, "", `${siteSentence} Dans votre secteur, ${SEGMENTS[prospect.segment].need} ont un impact direct sur les demandes clients.`, "", `Je propose ${sanitizeText(service, 160).toLowerCase()} et peux vous transmettre un diagnostic court, fondé sur des éléments vérifiables.`, "", "Seriez-vous disponible pour un échange de 15 minutes ?", "", "Bien cordialement,"].join("\n");
 }
-
-function createMessage(prospect, service, segment) {
-  const segmentInfo = SEGMENTS[segment];
-  const evidence = prospect.reasons.slice(0, 2).join(" et ").toLowerCase();
-  return [
-    "Bonjour,",
-    "",
-    `Je me permets de vous contacter au sujet de ${prospect.name}. Votre activité fait partie des secteurs où ${segmentInfo.commercialReason}.`,
-    "",
-    evidence ? `Les informations publiques indiquent notamment ${evidence}.` : "Votre entreprise présente un profil intéressant pour renforcer sa présence numérique.",
-    "",
-    `Je propose ${sanitizePlainText(service, 160).toLowerCase()} avec un diagnostic préalable des priorités réellement utiles à votre activité.`,
-    "",
-    "Seriez-vous disponible pour un échange de 15 minutes ?",
-    "",
-    "Bien cordialement,"
-  ].join("\n");
-}
-
-function mapCompanyToProspect(company, service, segment) {
-  if (!company || isExcludedOrganization(company)) return null;
-
-  const site = getHeadOffice(company);
-  const complements = company.complements || {};
-  const financialEntry = getFinancialRecord(company);
-  const financial = financialEntry?.record || {};
+function mapCompany(company, formData) {
+  if (!company || isExcluded(company)) return null;
+  const site = getSite(company); const financialEntry = getFinancial(company); const financial = financialEntry?.record || {};
   const revenue = parseMoney(firstDefined(financial.ca, financial.chiffre_affaires, financial.chiffre_affaires_net));
-  const result = parseMoney(firstDefined(financial.resultat_net, financial.resultat));
+  const netResult = parseMoney(firstDefined(financial.resultat_net, financial.resultat));
   const employeeCode = firstDefined(company.tranche_effectif_salarie, site.tranche_effectif_salarie);
   const employees = employeeMidpoint(employeeCode);
-  const employer = firstDefined(company.caractere_employeur, site.caractere_employeur) === "O" || firstDefined(company.est_employeur, complements.est_employeur) === true;
-  const establishmentsOpen = Number(firstDefined(company.nombre_etablissements_ouverts, company.nombre_etablissements, 1)) || 1;
-  const category = sanitizePlainText(firstDefined(company.categorie_entreprise, complements.categorie_entreprise), 20).toUpperCase() || "Inconnue";
-  const creationDate = sanitizePlainText(firstDefined(company.date_creation, company.date_creation_unite_legale, site.date_creation), 20) || null;
-  const ageYears = creationDate ? yearsSince(creationDate) : null;
-  const commercialName = sanitizePlainText(firstDefined(site.enseigne, site.nom_commercial, company.nom_commercial), 180) || null;
-  const budget = estimateBudget({ revenue, employees, employer, establishmentsOpen, category });
-  const priority = calculateCommercialPriority({
-    budget,
-    ageYears,
-    establishmentsOpen,
-    employees,
-    employer,
-    hasCommercialName: Boolean(commercialName),
-    segment
-  });
-
-  const name = sanitizePlainText(firstDefined(company.nom_complet, company.nom_raison_sociale, commercialName, company.sigle), 200);
+  const employer = firstDefined(company.caractere_employeur, site.caractere_employeur) === "O" || firstDefined(company.est_employeur, company?.complements?.est_employeur) === true;
+  const establishments = Number(firstDefined(company.nombre_etablissements_ouverts, company.nombre_etablissements, 1)) || 1;
+  const companyCategory = sanitizeText(firstDefined(company.categorie_entreprise, company?.complements?.categorie_entreprise), 20).toUpperCase() || "Inconnue";
+  const creationDate = sanitizeText(firstDefined(company.date_creation, company.date_creation_unite_legale, site.date_creation), 20) || null;
+  const commercialName = sanitizeText(firstDefined(site.enseigne, site.nom_commercial, company.nom_commercial), 180) || null;
+  const name = sanitizeText(firstDefined(company.nom_complet, company.nom_raison_sociale, commercialName, company.sigle), 200);
   if (!name) return null;
-
-  const prospect = {
-    id: sanitizePlainText(firstDefined(company.siren, site.siret, crypto.randomUUID()), 40),
-    name,
-    commercialName,
-    activityLabel: sanitizePlainText(firstDefined(company.libelle_activite_principale, site.libelle_activite_principale, SEGMENTS[segment].label), 180),
-    activityCode: sanitizePlainText(firstDefined(company.activite_principale, site.activite_principale), 12),
-    address: formatAddress(site),
-    city: sanitizePlainText(firstDefined(site.libelle_commune, site.commune), 120),
-    siren: sanitizePlainText(company.siren, 12),
-    siret: sanitizePlainText(site.siret, 18),
-    legalForm: sanitizePlainText(firstDefined(company.libelle_nature_juridique, company.nature_juridique), 180),
-    creationDate,
-    ageYears,
-    establishmentsOpen,
-    employeeCode: sanitizePlainText(employeeCode, 10),
-    employees,
-    employer,
-    companyCategory: category,
-    revenue,
-    result,
-    financialYear: financialEntry?.year || null,
-    budget,
-    score: priority.score,
-    reasons: priority.reasons,
-    strengths: priority.strengths,
-    website: null,
-    technology: "Non analysée",
-    websiteNotes: "",
-    status: "new",
-    source: "Annuaire des Entreprises / INSEE",
-    capturedAt: new Date().toISOString(),
-    segment
-  };
-  prospect.message = createMessage(prospect, service, segment);
+  const business = calculateBusinessFit({ revenue, employees, employer, establishments, ageYears: creationDate ? yearsSince(creationDate) : null, companyCategory, hasTradeName: Boolean(commercialName), segment: formData.category });
+  const prospect = { id: sanitizeText(firstDefined(company.siren, site.siret, crypto.randomUUID()), 40), name, commercialName, activityLabel: sanitizeText(firstDefined(company.libelle_activite_principale, site.libelle_activite_principale, SEGMENTS[formData.category].label), 180), activityCode: sanitizeText(firstDefined(company.activite_principale, site.activite_principale), 12), address: formatAddress(site), city: sanitizeText(firstDefined(site.libelle_commune, site.commune), 120), siren: sanitizeText(company.siren, 12), siret: sanitizeText(site.siret, 18), legalForm: sanitizeText(firstDefined(company.libelle_nature_juridique, company.nature_juridique), 180), creationDate, establishments, employees, employer, companyCategory, revenue, netResult, financialYear: financialEntry?.year || null, businessScore: business.score, businessEvidence: business.evidence, website: null, noSiteConfirmed: false, audit: null, manualIssues: [], siteNeed: null, finalPriority: null, status: "new", segment: formData.category, service: formData.service, capturedAt: new Date().toISOString() };
+  prospect.message = createMessage(prospect, formData.service);
   return prospect;
 }
+function deduplicate(items) { const seen = new Set(); return items.filter((item) => { const key = item.siren || item.siret || `${item.name}|${item.address}`; if (seen.has(key)) return false; seen.add(key); return true; }); }
 
-function deduplicateProspects(items) {
-  const seen = new Set();
-  return items.filter((item) => {
-    const key = item.siren || item.siret || `${item.name.toLowerCase()}|${item.address.toLowerCase()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+function calculateSiteNeed(prospect) {
+  if (prospect.noSiteConfirmed) return { score: 92, label: "Aucun site confirmé", confidence: "Élevée", evidence: ["Absence de site confirmée manuellement"] };
+  if (!prospect.audit) return null;
+  let score = 15; const evidence = [];
+  const { performance, seo, accessibility, bestPractices, title, description } = prospect.audit;
+  if (performance !== null) { if (performance < 45) { score += 30; evidence.push("Performance mobile très faible"); } else if (performance < 65) { score += 20; evidence.push("Performance mobile faible"); } else if (performance < 80) { score += 9; evidence.push("Performance mobile perfectible"); } else { score -= 6; } }
+  if (seo !== null) { if (seo < 65) { score += 18; evidence.push("Fondations SEO faibles"); } else if (seo < 80) { score += 8; evidence.push("SEO perfectible"); } else { score -= 4; } }
+  if (accessibility !== null) { if (accessibility < 70) { score += 12; evidence.push("Accessibilité technique faible"); } else if (accessibility < 85) { score += 5; } }
+  if (bestPractices !== null && bestPractices < 70) { score += 10; evidence.push("Bonnes pratiques techniques insuffisantes"); }
+  if (!title) { score += 7; evidence.push("Titre de page absent ou non détecté"); }
+  if (!description) { score += 6; evidence.push("Description de page absente ou non détectée"); }
+  for (const issue of prospect.manualIssues || []) { score += MANUAL_WEIGHTS[issue] || 0; }
+  if (prospect.manualIssues?.includes("siteGood")) evidence.push("Contrôle manuel : site déjà professionnel");
+  const finalScore = clamp(score);
+  const label = finalScore >= 70 ? "Refonte probable" : finalScore >= 45 ? "Améliorations utiles" : "Site plutôt satisfaisant";
+  return { score: finalScore, label, confidence: prospect.manualIssues?.length ? "Élevée" : "Moyenne", evidence: evidence.slice(0, 7) };
+}
+function updatePriority(prospect) {
+  prospect.siteNeed = calculateSiteNeed(prospect);
+  prospect.finalPriority = prospect.siteNeed ? clamp(prospect.businessScore * .42 + prospect.siteNeed.score * .58) : null;
+  prospect.message = createMessage(prospect, prospect.service || "création et refonte de sites web");
 }
 
-async function discoverProspects(formData) {
-  setProgress(8, "Localisation de la zone…");
-  const geo = await geocodeLocation(formData.location);
-  setProgress(26, "Recherche dans le registre officiel des entreprises…");
-  const companies = await fetchCompanies(formData, geo);
-  setProgress(68, "Exclusion des associations et calcul du potentiel d’achat…");
-  const prospects = deduplicateProspects(
-    companies.map((company) => mapCompanyToProspect(company, formData.service, formData.category)).filter(Boolean)
-  );
-  prospects.sort((a, b) => b.score - a.score || b.budget.points - a.budget.points || a.name.localeCompare(b.name, "fr"));
-  return { geo, prospects: prospects.slice(0, formData.limit) };
-}
-
-function readFormData() {
-  const service = sanitizePlainText(dom.service.value, 160);
-  const location = sanitizePlainText(dom.location.value, 120);
-  const category = Object.hasOwn(SEGMENTS, dom.category.value) ? dom.category.value : "fastfood";
-  const radiusKm = Math.max(1, Math.min(CONFIG.maxRadiusKm, Number(dom.radius.value) || 20));
-  const limit = Math.max(10, Math.min(CONFIG.maxResults, Number(dom.resultLimit.value) || CONFIG.maxResults));
-  if (service.length < 3) throw new Error("Décris plus précisément le service vendu.");
-  if (location.length < 2) throw new Error("Indique une ville ou une zone valide.");
+function readForm() {
+  const service = sanitizeText(dom.service.value, 160); const location = sanitizeText(dom.location.value, 120); const category = Object.hasOwn(SEGMENTS, dom.category.value) ? dom.category.value : "fastfood";
+  const radiusKm = Math.min(CONFIG.maxRadiusKm, Math.max(1, Number(dom.radius.value) || 20)); const limit = Math.min(CONFIG.maxResults, Math.max(10, Number(dom.resultLimit.value) || 50));
+  if (service.length < 3) throw new Error("Décris le service vendu."); if (location.length < 2) throw new Error("Indique une ville ou une zone.");
   return { service, location, category, radiusKm, limit };
 }
-
-function createElement(tag, options = {}) {
-  const element = document.createElement(tag);
-  if (options.className) element.className = options.className;
-  if (options.text !== undefined) element.textContent = String(options.text);
-  if (options.attributes) {
-    for (const [name, value] of Object.entries(options.attributes)) element.setAttribute(name, String(value));
-  }
-  return element;
+async function searchProspects(event) {
+  event.preventDefault(); if (state.isLoading) return;
+  try {
+    const formData = readForm(); setLoading(true); setProgress(8, "Localisation de la zone…"); const geo = await geocodeLocation(formData.location);
+    setProgress(30, "Recherche des entreprises actives…"); const companies = await fetchCompanies(formData, geo);
+    setProgress(72, "Exclusion des structures non ciblées et calcul du potentiel…");
+    const prospects = deduplicate(companies.map((company) => mapCompany(company, formData)).filter(Boolean)).sort((a, b) => b.businessScore - a.businessScore).slice(0, formData.limit);
+    state.items = prospects; persistItems(); render(); setProgress(100, `${prospects.length} entreprises trouvées autour de ${geo.label}.`); showNotice(`${prospects.length} entreprises trouvées. Vérifie ensuite leur site pour valider la priorité.`, "success");
+  } catch (error) { setProgress(0, "La recherche n’a pas abouti."); showNotice(error instanceof Error ? error.message : "Erreur inattendue.", "error"); }
+  finally { setLoading(false); }
 }
 
-function formatMoney(value) {
-  if (!Number.isFinite(value)) return "Non publié";
-  return new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value);
-}
-
-function formatDate(value) {
-  if (!value) return "Non renseignée";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("fr-FR").format(date);
-}
-
-function createMetric(label, value, emphasis = false) {
-  const box = createElement("div", { className: `metric${emphasis ? " metric-emphasis" : ""}` });
-  box.append(createElement("span", { text: label }), createElement("strong", { text: value }));
-  return box;
-}
-
-function getGoogleSearchUrl(prospect) {
-  const query = [prospect.commercialName || prospect.name, prospect.city || prospect.address, "site officiel"].filter(Boolean).join(" ");
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
-}
-
-function openPreview(prospect) {
-  if (!prospect.website) {
-    showNotice("Enregistre d’abord une URL vérifiée pour afficher l’aperçu.", "warning");
-    return;
-  }
-  dom.previewUrl.textContent = prospect.website;
-  dom.previewFrame.src = prospect.website;
-  dom.previewDialog.showModal();
-}
-
-function createProspectCard(prospect) {
-  const article = createElement("article", { className: "result-card" });
-  const summary = createElement("div");
-  summary.append(createElement("h3", { text: prospect.commercialName || prospect.name }));
-  if (prospect.commercialName && prospect.commercialName !== prospect.name) {
-    summary.append(createElement("div", { className: "legal-name", text: prospect.name }));
-  }
-  summary.append(createElement("div", {
-    className: "result-subtitle",
-    text: `${prospect.activityLabel || "Activité non renseignée"} · ${prospect.address}`
-  }));
-
-  const signals = createElement("div", { className: "signal-list" });
-  signals.append(createElement("span", { className: `signal-tag budget-${prospect.budget.level}`, text: `Budget ${prospect.budget.label}` }));
-  for (const reason of prospect.reasons) signals.append(createElement("span", { className: "signal-tag warning", text: reason }));
-  for (const strength of prospect.strengths) signals.append(createElement("span", { className: "signal-tag positive", text: strength }));
-  summary.append(signals);
-
-  const scoreBlock = createElement("div", { className: "score-block" });
-  const scoreClass = prospect.score < 50 ? "low" : prospect.score < 75 ? "medium" : "";
-  scoreBlock.append(
-    createElement("span", { className: `opportunity-score${scoreClass ? ` ${scoreClass}` : ""}`, text: `${prospect.score}/100` }),
-    createElement("small", { text: "priorité commerciale" })
-  );
-
-  const details = createElement("details", { className: "result-details" });
-  details.append(createElement("summary", { text: "Voir le potentiel, le site et préparer le contact" }));
-
-  const metrics = createElement("div", { className: "metrics-grid" });
-  metrics.append(
-    createMetric("Budget estimé", prospect.budget.label, prospect.budget.level === "high"),
-    createMetric("Chiffre d’affaires", prospect.revenue !== null ? `${formatMoney(prospect.revenue)}${prospect.financialYear ? ` (${prospect.financialYear})` : ""}` : "Non publié"),
-    createMetric("Effectif estimé", prospect.employees !== null ? String(prospect.employees) : "Non publié"),
-    createMetric("Établissements ouverts", String(prospect.establishmentsOpen)),
-    createMetric("Création", formatDate(prospect.creationDate)),
-    createMetric("Catégorie", prospect.companyCategory || "Inconnue")
-  );
-  details.append(metrics);
-
-  const detailGrid = createElement("div", { className: "detail-grid" });
-  const companyColumn = createElement("div");
-  companyColumn.append(createElement("h4", { text: "Qualification de l’entreprise" }));
-  const facts = createElement("dl", { className: "facts-list" });
-  const factEntries = [
-    ["SIREN", prospect.siren || "Non renseigné"],
-    ["SIRET local", prospect.siret || "Non renseigné"],
-    ["Code APE", prospect.activityCode || "Non renseigné"],
-    ["Forme juridique", prospect.legalForm || "Non renseignée"],
-    ["Employeur", prospect.employer ? "Oui" : "Non confirmé"],
-    ["Résultat net", prospect.result !== null ? formatMoney(prospect.result) : "Non publié"]
-  ];
-  for (const [label, value] of factEntries) {
-    facts.append(createElement("dt", { text: label }), createElement("dd", { text: value }));
-  }
-  companyColumn.append(facts);
-
-  const websiteColumn = createElement("div");
-  websiteColumn.append(createElement("h4", { text: "Site et technologie" }));
-  const websiteLabel = createElement("label", { text: "URL du site vérifié", attributes: { for: `website-${prospect.id}` } });
-  const websiteInput = createElement("input", {
-    className: "website-input",
-    attributes: {
-      id: `website-${prospect.id}`,
-      type: "url",
-      inputmode: "url",
-      placeholder: "https://www.exemple.fr",
-      maxlength: "2048"
-    }
-  });
-  websiteInput.value = prospect.website || "";
-  const websiteFeedback = createElement("p", {
-    className: "website-feedback",
-    text: prospect.website ? `Site enregistré · Technologie : ${prospect.technology}` : "Aucun site vérifié. La technologie reste non analysée."
-  });
-  const saveWebsite = createElement("button", { className: "secondary-button", text: "Enregistrer l’URL" });
-  saveWebsite.type = "button";
-  saveWebsite.addEventListener("click", () => {
-    const normalized = normalizeExternalUrl(websiteInput.value.trim());
-    if (!normalized) {
-      showNotice("URL invalide ou adresse locale interdite.", "error");
-      return;
-    }
-    prospect.website = normalized;
-    prospect.technology = "Non analysée";
-    websiteInput.value = normalized;
-    websiteFeedback.textContent = "Site enregistré · Technologie : non analysée";
-    persistItems();
-    render();
-    showNotice("URL vérifiée enregistrée pour ce prospect.", "success");
-  });
-  websiteColumn.append(websiteLabel, websiteInput, websiteFeedback, saveWebsite);
-
-  detailGrid.append(companyColumn, websiteColumn);
-  details.append(detailGrid);
-
-  const messageSection = createElement("div", { className: "message-section" });
-  messageSection.append(createElement("h4", { text: "Message proposé" }));
-  const textarea = createElement("textarea", {
-    className: "message-box",
-    attributes: { "aria-label": `Message pour ${prospect.name}` }
-  });
-  textarea.value = prospect.message;
-  textarea.addEventListener("input", () => {
-    prospect.message = textarea.value.slice(0, 4000);
-    persistItems();
-  });
-  messageSection.append(textarea);
-  details.append(messageSection);
-
-  const actions = createElement("div", { className: "card-actions" });
-  const searchSite = createElement("a", {
-    className: "secondary-button",
-    text: "Rechercher le site",
-    attributes: { href: getGoogleSearchUrl(prospect), target: "_blank", rel: "noopener noreferrer" }
-  });
-  actions.append(searchSite);
-
-  if (prospect.website) {
-    const previewButton = createElement("button", { className: "secondary-button", text: "Aperçu du site" });
-    previewButton.type = "button";
-    previewButton.addEventListener("click", () => openPreview(prospect));
-    actions.append(previewButton);
-    actions.append(createElement("a", {
-      className: "secondary-button",
-      text: "Ouvrir le site",
-      attributes: { href: prospect.website, target: "_blank", rel: "noopener noreferrer nofollow" }
-    }));
-  }
-
-  const copyButton = createElement("button", { className: "secondary-button", text: "Copier le message" });
-  copyButton.type = "button";
-  copyButton.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(prospect.message);
-      showNotice("Message copié.", "success");
-    } catch {
-      textarea.select();
-      showNotice("Sélectionne puis copie le message manuellement.", "warning");
-    }
-  });
-  actions.append(copyButton);
-
-  const statusSelect = createElement("select", {
-    className: "status-select",
-    attributes: { "aria-label": `Statut de ${prospect.name}` }
-  });
-  for (const [value, label] of Object.entries(STATUS_LABELS)) {
-    const option = createElement("option", { text: label, attributes: { value } });
-    option.selected = prospect.status === value;
-    statusSelect.append(option);
-  }
-  statusSelect.addEventListener("change", () => {
-    prospect.status = Object.hasOwn(STATUS_LABELS, statusSelect.value) ? statusSelect.value : "new";
-    persistItems();
-  });
-  actions.append(statusSelect);
-  details.append(actions);
-
-  article.append(summary, scoreBlock, details);
-  return article;
-}
+function formatMoney(value) { return Number.isFinite(value) ? new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(value) : "Non publié"; }
+function formatDate(value) { if (!value) return "Non renseignée"; const date = new Date(value); return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat("fr-FR").format(date); }
+function getSiteStatus(prospect) { if (prospect.noSiteConfirmed) return { label: "Aucun site confirmé", className: "bad" }; if (prospect.audit) return { label: "Site analysé", className: "good" }; if (prospect.website) return { label: "URL enregistrée", className: "neutral" }; return { label: "À rechercher", className: "pending" }; }
+function getPriorityStatus(prospect) { if (prospect.finalPriority === null) return { label: "Non validée", className: "pending" }; if (prospect.finalPriority >= 70) return { label: `${prospect.finalPriority}/100`, className: "bad" }; if (prospect.finalPriority >= 50) return { label: `${prospect.finalPriority}/100`, className: "neutral" }; return { label: `${prospect.finalPriority}/100`, className: "good" }; }
 
 function getVisibleItems() {
-  const query = sanitizePlainText(dom.filter.value, 120).toLowerCase();
-  const budgetFilter = dom.budgetFilter.value;
-  const websiteFilter = dom.websiteFilter.value;
+  const query = sanitizeText(dom.filter.value, 120).toLowerCase(); const qualification = dom.qualificationFilter.value; const sort = dom.sort.value;
   const items = state.items.filter((item) => {
-    const matchesText = !query || [item.name, item.commercialName, item.activityLabel, item.activityCode, item.address, item.city, item.siren, item.siret]
-      .filter(Boolean).join(" ").toLowerCase().includes(query);
-    const matchesBudget = budgetFilter === "all" || item.budget.level === "high" || (budgetFilter === "medium" && item.budget.level === "medium");
-    const matchesWebsite = websiteFilter === "all" || (websiteFilter === "known" ? Boolean(item.website) : !item.website);
-    return matchesText && matchesBudget && matchesWebsite;
+    if (query && ![item.name, item.commercialName, item.city, item.address, item.activityLabel].join(" ").toLowerCase().includes(query)) return false;
+    if (qualification === "high" && !(item.finalPriority >= 70)) return false;
+    if (qualification === "audited" && !(item.audit || item.noSiteConfirmed)) return false;
+    if (qualification === "pending" && (item.audit || item.noSiteConfirmed)) return false;
+    return true;
   });
-
-  return items.toSorted((a, b) => {
-    switch (dom.sort.value) {
-      case "budget": return b.budget.points - a.budget.points || b.score - a.score;
-      case "revenue": return (b.revenue ?? -1) - (a.revenue ?? -1) || b.score - a.score;
-      case "employees": return (b.employees ?? -1) - (a.employees ?? -1) || b.score - a.score;
-      case "recent": return String(b.creationDate || "").localeCompare(String(a.creationDate || ""));
-      case "name": return a.name.localeCompare(b.name, "fr");
-      default: return b.score - a.score || b.budget.points - a.budget.points;
-    }
+  return items.sort((a, b) => {
+    if (sort === "business") return b.businessScore - a.businessScore;
+    if (sort === "site") return (b.siteNeed?.score ?? -1) - (a.siteNeed?.score ?? -1);
+    if (sort === "revenue") return (b.revenue ?? -1) - (a.revenue ?? -1);
+    if (sort === "name") return (a.commercialName || a.name).localeCompare(b.commercialName || b.name, "fr");
+    return (b.finalPriority ?? -1) - (a.finalPriority ?? -1) || b.businessScore - a.businessScore;
   });
 }
-
+function createCell(label) { const cell = document.createElement("td"); cell.dataset.label = label; return cell; }
+function createBadge(label, className) { const badge = document.createElement("span"); badge.className = `status-badge ${className}`; badge.textContent = label; return badge; }
 function render() {
-  const items = getVisibleItems();
-  dom.count.textContent = `${items.length} prospect${items.length > 1 ? "s" : ""}`;
-  dom.results.replaceChildren();
-  if (!items.length) {
-    const empty = createElement("div", { className: "empty-state" });
-    empty.append(createElement("strong", { text: "Aucun prospect à afficher." }));
-    empty.append(createElement("p", { text: "Lance une recherche ou élargis les filtres." }));
-    dom.results.append(empty);
-    return;
-  }
+  const visible = getVisibleItems(); dom.results.replaceChildren(); dom.emptyState.hidden = visible.length > 0; dom.count.textContent = `${visible.length} entreprise${visible.length > 1 ? "s" : ""}`;
+  const audited = state.items.filter((item) => item.audit || item.noSiteConfirmed).length; const high = state.items.filter((item) => item.finalPriority >= 70).length;
+  dom.summaryTotal.textContent = String(state.items.length); dom.summaryAudited.textContent = String(audited); dom.summaryHigh.textContent = String(high); dom.summaryPending.textContent = String(state.items.length - audited);
   const fragment = document.createDocumentFragment();
-  for (const item of items) fragment.append(createProspectCard(item));
+  for (const item of visible) {
+    const row = document.createElement("tr");
+    const companyCell = createCell("Entreprise"); companyCell.className = "company-cell"; const name = document.createElement("strong"); name.textContent = item.commercialName || item.name; const meta = document.createElement("span"); meta.textContent = `${item.activityLabel || SEGMENTS[item.segment].label} · ${item.city || item.address}`; companyCell.append(name, meta);
+    const businessCell = createCell("Potentiel"); businessCell.append(Object.assign(document.createElement("span"), { className: "score-value", textContent: `${item.businessScore}/100` }), Object.assign(document.createElement("span"), { className: "score-caption", textContent: item.employees && item.employees > 100 ? "structure peu accessible" : "adéquation commerciale" }));
+    const siteCell = createCell("Site internet"); const siteStatus = getSiteStatus(item); siteCell.append(createBadge(siteStatus.label, siteStatus.className));
+    const needCell = createCell("Besoin web"); needCell.append(item.siteNeed ? createBadge(`${item.siteNeed.score}/100 · ${item.siteNeed.label}`, item.siteNeed.score >= 60 ? "bad" : "good") : createBadge("À auditer", "pending"));
+    const priorityCell = createCell("Priorité"); const priority = getPriorityStatus(item); priorityCell.append(createBadge(priority.label, priority.className));
+    const actionCell = createCell("Actions"); actionCell.className = "row-actions"; const button = document.createElement("button"); button.className = "button button-secondary"; button.type = "button"; button.textContent = "Qualifier"; button.addEventListener("click", () => openProspect(item.id)); actionCell.append(button);
+    row.append(companyCell, businessCell, siteCell, needCell, priorityCell, actionCell); fragment.append(row);
+  }
   dom.results.append(fragment);
 }
 
-function quoteCsv(value) {
-  return `"${String(value ?? "").replaceAll('"', '""')}"`;
+function createMetric(label, value) { const box = document.createElement("div"); box.className = "metric"; const span = document.createElement("span"); span.textContent = label; const strong = document.createElement("strong"); strong.textContent = value; box.append(span, strong); return box; }
+function selectedProspect() { return state.items.find((item) => item.id === state.selectedId) || null; }
+function openProspect(id) { state.selectedId = id; syncDialog(); dom.dialog.showModal(); }
+function syncDialog() {
+  const item = selectedProspect(); if (!item) return;
+  dom.dialogTitle.textContent = item.commercialName || item.name; dom.dialogSubtitle.textContent = `${item.activityLabel} · ${item.address}`; dom.dialogSegment.textContent = SEGMENTS[item.segment]?.label || "Prospect"; dom.dialogBusinessScore.textContent = `${item.businessScore}/100`;
+  dom.dialogMetrics.replaceChildren(createMetric("SIREN", item.siren || "Non renseigné"), createMetric("Création", formatDate(item.creationDate)), createMetric("Effectif estimé", item.employees !== null ? String(item.employees) : "Non publié"), createMetric("Établissements", String(item.establishments)), createMetric("Chiffre d’affaires", formatMoney(item.revenue)), createMetric("Résultat net", formatMoney(item.netResult)), createMetric("Catégorie", item.companyCategory), createMetric("Employeur", item.employer ? "Oui" : "Non confirmé"));
+  dom.dialogBusinessEvidence.replaceChildren(); for (const evidence of item.businessEvidence) { const chip = document.createElement("span"); chip.className = "evidence-chip"; chip.textContent = evidence; dom.dialogBusinessEvidence.append(chip); }
+  dom.siteUrl.value = item.website || ""; dom.noSiteConfirmed.checked = Boolean(item.noSiteConfirmed); dom.prospectStatus.value = item.status || "new"; dom.contactMessage.value = item.message || ""; dom.openSite.hidden = !item.website; if (item.website) dom.openSite.href = item.website;
+  for (const input of dom.manualReview.querySelectorAll('input[type="checkbox"]')) input.checked = item.manualIssues?.includes(input.value) || false;
+  renderAudit(item);
+}
+function renderAudit(item) {
+  dom.dialogSiteScore.className = `score-pill${item.siteNeed ? "" : " neutral"}`; dom.dialogSiteScore.textContent = item.siteNeed ? `${item.siteNeed.score}/100` : "À vérifier";
+  dom.websitePreview.replaceChildren();
+  if (item.audit?.screenshot) { const image = document.createElement("img"); image.src = item.audit.screenshot; image.alt = `Capture du site ${item.website || item.name}`; image.referrerPolicy = "no-referrer"; dom.websitePreview.append(image); }
+  else { const placeholder = document.createElement("div"); placeholder.className = "preview-placeholder"; const strong = document.createElement("strong"); strong.textContent = "Aperçu indisponible"; const paragraph = document.createElement("p"); paragraph.textContent = "Enregistre une URL puis lance l’analyse pour obtenir une capture du site."; placeholder.append(strong, paragraph); dom.websitePreview.append(placeholder); }
+  dom.auditMetrics.replaceChildren();
+  const metrics = [["Performance", item.audit?.performance], ["SEO", item.audit?.seo], ["Accessibilité", item.audit?.accessibility], ["Bonnes pratiques", item.audit?.bestPractices]];
+  for (const [label, value] of metrics) { const box = document.createElement("div"); box.className = "audit-metric"; const span = document.createElement("span"); span.textContent = label; const strong = document.createElement("strong"); strong.textContent = value === null || value === undefined ? "—" : `${value}/100`; box.append(span, strong); dom.auditMetrics.append(box); }
+  dom.technologyList.replaceChildren();
+  const technologies = item.audit?.technologies || [];
+  if (!technologies.length) { const small = document.createElement("small"); small.textContent = item.audit ? "Aucune technologie reconnue" : "Non analysées"; dom.technologyList.append(small); }
+  else for (const technology of technologies) { const tag = document.createElement("span"); tag.className = "tech-tag"; tag.textContent = technology; dom.technologyList.append(tag); }
+}
+function getGoogleSearchUrl(item) { return `https://www.google.com/search?q=${encodeURIComponent(`${item.commercialName || item.name} ${item.city || item.address} site officiel`)}`; }
+function saveCurrentDialog() {
+  const item = selectedProspect(); if (!item) return;
+  const normalized = normalizeUrl(dom.siteUrl.value.trim());
+  if (dom.siteUrl.value.trim() && !normalized) { showNotice("L’URL du site n’est pas valide ou pointe vers un réseau privé.", "warning"); return; }
+  item.website = normalized; item.noSiteConfirmed = dom.noSiteConfirmed.checked; if (item.noSiteConfirmed) { item.website = null; item.audit = null; }
+  item.manualIssues = [...dom.manualReview.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value);
+  item.status = Object.hasOwn(STATUS_LABELS, dom.prospectStatus.value) ? dom.prospectStatus.value : "new"; item.message = dom.contactMessage.value.slice(0, 4000);
+  updatePriority(item); persistItems(); syncDialog(); render(); showNotice("Prospect mis à jour.", "success");
 }
 
-function exportCsv() {
-  if (!state.items.length) {
-    showNotice("Aucun prospect à exporter.", "warning");
-    return;
+function recursiveFindScore(root, names) {
+  const visited = new Set();
+  function walk(value, depth = 0) {
+    if (!value || typeof value !== "object" || depth > 8 || visited.has(value)) return null;
+    visited.add(value);
+    for (const name of names) {
+      const candidate = value[name];
+      if (typeof candidate === "number") return normalizeScore(candidate);
+      if (candidate && typeof candidate === "object" && typeof candidate.score === "number") return normalizeScore(candidate.score);
+    }
+    for (const child of Object.values(value)) { const result = walk(child, depth + 1); if (result !== null) return result; }
+    return null;
   }
-  const rows = [[
-    "Entreprise", "Enseigne", "Activité", "APE", "Adresse", "SIREN", "SIRET", "Création", "Effectif estimé",
-    "Établissements", "CA public", "Année CA", "Budget estimé", "Score", "Site vérifié", "Technologie", "Statut", "Source"
-  ], ...state.items.map((item) => [
-    item.name, item.commercialName || "", item.activityLabel, item.activityCode, item.address, item.siren, item.siret,
-    item.creationDate || "", item.employees ?? "", item.establishmentsOpen, item.revenue ?? "", item.financialYear ?? "",
-    item.budget.label, item.score, item.website || "", item.technology, STATUS_LABELS[item.status] || STATUS_LABELS.new, item.source
-  ])];
-  const csv = rows.map((row) => row.map(quoteCsv).join(";")).join("\r\n");
-  const blob = new Blob(["\ufeff", csv], { type: "text/csv;charset=utf-8" });
-  const downloadUrl = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = downloadUrl;
-  link.download = `signallead-prospects-${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(downloadUrl);
+  return walk(root);
 }
-
-async function handleSubmit(event) {
-  event.preventDefault();
-  if (state.isLoading) return;
+function extractTechnologies(payload) {
+  const output = new Set(); const visited = new Set();
+  function walk(value, key = "", depth = 0) {
+    if (!value || depth > 7) return;
+    if (typeof value === "string" && /technolog|framework|cms|platform|library/i.test(key) && value.length < 80) output.add(sanitizeText(value, 80));
+    if (typeof value !== "object" || visited.has(value)) return; visited.add(value);
+    if (Array.isArray(value)) { for (const item of value) { if (typeof item === "string" && item.length < 80) output.add(sanitizeText(item, 80)); else if (item?.name) output.add(sanitizeText(item.name, 80)); else walk(item, key, depth + 1); } }
+    else for (const [childKey, child] of Object.entries(value)) { if (/technolog|framework|cms|platform|library/i.test(childKey)) walk(child, childKey, depth + 1); else if (depth < 4) walk(child, childKey, depth + 1); }
+  }
+  walk(payload); return [...output].filter(Boolean).slice(0, 12);
+}
+async function resolveInsights(payload) {
+  const insights = payload?.insights;
+  if (insights?.url && /^https:\/\//i.test(insights.url)) { try { return await fetchJson(insights.url, CONFIG.auditTimeoutMs); } catch { return insights; } }
+  return insights || payload;
+}
+async function auditCurrentSite() {
+  const item = selectedProspect(); if (!item) return;
+  const website = normalizeUrl(dom.siteUrl.value.trim() || item.website);
+  if (!website) { showNotice("Enregistre d’abord l’URL officielle du site.", "warning"); return; }
+  dom.auditSite.disabled = true; dom.auditSite.textContent = "Analyse en cours…";
   try {
-    const formData = readFormData();
-    setLoading(true);
-    setProgress(2, "Préparation de la recherche…");
-    const result = await discoverProspects(formData);
-    state.items = result.prospects;
-    persistItems();
-    render();
-    setProgress(100, `${state.items.length} entreprises privées classées autour de ${result.geo.label}.`);
-    showNotice(`${state.items.length} entreprises classées. Associations et structures publiques exclues.`, "success");
+    const params = new URLSearchParams({ url: website, screenshot: "true", insights: "true" });
+    const response = await fetchJson(`${CONFIG.microlinkEndpoint}?${params}`, CONFIG.auditTimeoutMs);
+    if (response?.status && response.status !== "success") throw new Error(response?.message || "Le site n’a pas pu être analysé.");
+    const payload = response?.data || response; const insights = await resolveInsights(payload);
+    item.website = website; item.noSiteConfirmed = false;
+    item.audit = { auditedAt: new Date().toISOString(), screenshot: normalizeUrl(firstDefined(payload?.screenshot?.url, payload?.screenshot, payload?.image?.url)) || null, title: sanitizeText(firstDefined(payload?.title, payload?.data?.title), 240) || null, description: sanitizeText(firstDefined(payload?.description, payload?.data?.description), 500) || null, performance: recursiveFindScore(insights, ["performance"]), seo: recursiveFindScore(insights, ["seo"]), accessibility: recursiveFindScore(insights, ["accessibility"]), bestPractices: recursiveFindScore(insights, ["best-practices", "bestPractices", "best_practices"]), technologies: extractTechnologies({ payload, insights }) };
+    updatePriority(item); persistItems(); syncDialog(); render(); showNotice("Site analysé. Vérifie aussi visuellement la capture avant de contacter l’entreprise.", "success");
   } catch (error) {
-    setProgress(0, "La recherche n’a pas abouti.");
-    showNotice(error instanceof Error ? error.message : "Une erreur inattendue est survenue.", "error");
-  } finally {
-    setLoading(false);
-  }
+    showNotice(error instanceof Error ? `${error.message} Le quota gratuit d’analyse peut être atteint.` : "Analyse impossible.", "error");
+  } finally { dom.auditSite.disabled = false; dom.auditSite.textContent = "Analyser le site"; }
 }
 
-dom.form.addEventListener("submit", handleSubmit);
-dom.filter.addEventListener("input", render);
-dom.budgetFilter.addEventListener("change", render);
-dom.websiteFilter.addEventListener("change", render);
-dom.sort.addEventListener("change", render);
-dom.exportButton.addEventListener("click", exportCsv);
-dom.newSearch.addEventListener("click", () => {
-  dom.service.focus();
-  dom.form.scrollIntoView({ behavior: "smooth", block: "start" });
-});
-dom.closePreview.addEventListener("click", () => dom.previewDialog.close());
-dom.previewDialog.addEventListener("close", () => {
-  dom.previewFrame.src = "about:blank";
-  dom.previewUrl.textContent = "";
-});
+function csvValue(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
+function exportCsv() {
+  if (!state.items.length) { showNotice("Aucun résultat à exporter.", "warning"); return; }
+  const rows = [["Entreprise", "Enseigne", "Activité", "Ville", "SIREN", "Site", "Potentiel entreprise", "Besoin site", "Priorité validée", "Performance", "SEO", "Technologies", "CA", "Effectif", "Statut"], ...state.items.map((item) => [item.name, item.commercialName, item.activityLabel, item.city, item.siren, item.website, item.businessScore, item.siteNeed?.score ?? "", item.finalPriority ?? "", item.audit?.performance ?? "", item.audit?.seo ?? "", item.audit?.technologies?.join(" | ") || "", item.revenue ?? "", item.employees ?? "", STATUS_LABELS[item.status] || "Nouveau"])];
+  const blob = new Blob(["\ufeff", rows.map((row) => row.map(csvValue).join(";")).join("\r\n")], { type: "text/csv;charset=utf-8" }); const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `signallead-${new Date().toISOString().slice(0, 10)}.csv`; document.body.append(link); link.click(); link.remove(); URL.revokeObjectURL(url);
+}
+
+function closeDialog() { dom.dialog.close(); state.selectedId = null; }
+dom.form.addEventListener("submit", searchProspects);
+dom.filter.addEventListener("input", render); dom.qualificationFilter.addEventListener("change", render); dom.sort.addEventListener("change", render);
+dom.exportButton.addEventListener("click", exportCsv); dom.newSearch.addEventListener("click", () => document.querySelector("#search").scrollIntoView({ behavior: "smooth" }));
+dom.closeDialog.addEventListener("click", closeDialog); dom.dialog.addEventListener("click", (event) => { if (event.target === dom.dialog) closeDialog(); });
+dom.findSite.addEventListener("click", () => { const item = selectedProspect(); if (item) window.open(getGoogleSearchUrl(item), "_blank", "noopener,noreferrer"); });
+dom.saveSite.addEventListener("click", saveCurrentDialog); dom.saveProspect.addEventListener("click", saveCurrentDialog); dom.auditSite.addEventListener("click", auditCurrentSite);
+dom.copyMessage.addEventListener("click", async () => { try { await navigator.clipboard.writeText(dom.contactMessage.value); showNotice("Message copié.", "success"); } catch { dom.contactMessage.select(); showNotice("Le texte est sélectionné : copie-le manuellement.", "warning"); } });
+dom.noSiteConfirmed.addEventListener("change", () => { if (dom.noSiteConfirmed.checked) dom.siteUrl.value = ""; });
+dom.manualReview.addEventListener("change", () => { const item = selectedProspect(); if (!item) return; item.manualIssues = [...dom.manualReview.querySelectorAll('input[type="checkbox"]:checked')].map((input) => input.value); updatePriority(item); dom.dialogSiteScore.textContent = item.siteNeed ? `${item.siteNeed.score}/100` : "À vérifier"; });
 
 render();
