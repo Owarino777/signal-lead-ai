@@ -4,11 +4,13 @@ const WORKER_CLIENT = Object.freeze({
   batchSize: 10,
   auditLimit: 10,
   requestTimeoutMs: 15000,
+  healthTimeoutMs: 6000,
   concurrency: 3
 });
 
 const FALLBACK_ENRICH_PROSPECTS = enrichProspects;
 const FALLBACK_AUDIT_WEBSITE = auditWebsite;
+const PREVIOUS_GET_SITE_STATUS = getSiteStatus;
 
 function getBackendBaseUrl() {
   const value = String(window.SIGNAL_LEAD_BACKEND?.baseUrl || "").trim().replace(/\/+$/, "");
@@ -23,18 +25,31 @@ function getBackendBaseUrl() {
   }
 }
 
+function describeNetworkError(error) {
+  const message = error instanceof Error ? error.message : "Erreur réseau inconnue.";
+  if (/content security policy|failed to fetch|networkerror|load failed/i.test(message)) {
+    return "Le backend Cloudflare est inaccessible depuis cette page. Recharge la dernière version du site avec Ctrl + Shift + R.";
+  }
+  return sanitizeText(message, 300);
+}
+
 async function callWorker(path, body, timeoutMs = WORKER_CLIENT.requestTimeoutMs) {
   const baseUrl = getBackendBaseUrl();
   if (!baseUrl) throw new Error("Backend Cloudflare non configuré.");
 
-  const response = await fetchWithTimeout(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify(body)
-  }, timeoutMs);
+  let response;
+  try {
+    response = await fetchWithTimeout(`${baseUrl}${path}`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(body)
+    }, timeoutMs);
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
 
   let payload;
   try {
@@ -48,6 +63,40 @@ async function callWorker(path, body, timeoutMs = WORKER_CLIENT.requestTimeoutMs
   }
   return payload;
 }
+
+async function verifyWorkerHealth() {
+  const baseUrl = getBackendBaseUrl();
+  if (!baseUrl) throw new Error("Backend Cloudflare non configuré.");
+
+  let response;
+  try {
+    response = await fetchWithTimeout(`${baseUrl}/health`, {
+      method: "GET",
+      headers: { Accept: "application/json" }
+    }, WORKER_CLIENT.healthTimeoutMs);
+  } catch (error) {
+    throw new Error(describeNetworkError(error));
+  }
+
+  if (!response.ok) {
+    throw new Error(`Backend Cloudflare indisponible (${response.status}).`);
+  }
+
+  const payload = await response.json().catch(() => null);
+  if (payload?.status !== "ok") {
+    throw new Error("Le backend Cloudflare ne répond pas correctement.");
+  }
+}
+
+getSiteStatus = function getWorkerSiteStatus(item) {
+  if (item.websiteDiscoveryStatus === "searching") {
+    return { label: "Recherche en cours", className: "pending" };
+  }
+  if (item.websiteDiscoveryStatus === "enrichment_failed") {
+    return { label: "Enrichissement indisponible", className: "pending" };
+  }
+  return PREVIOUS_GET_SITE_STATUS(item);
+};
 
 function applyWorkerEnrichment(item, result) {
   if (!result?.found) {
@@ -92,6 +141,7 @@ function mapWorkerAudit(item, audit) {
     screenshot: `${CONFIG.screenshotEndpoint}${encodeURI(audit.finalUrl || item.website)}`
   };
   item.auditStatus = "completed";
+  item.auditError = null;
   if (audit.finalUrl) item.website = normalizeUrl(audit.finalUrl) || item.website;
   updatePriority(item);
 }
@@ -137,7 +187,7 @@ async function auditItemWithWorker(item) {
     mapWorkerAudit(item, payload.audit);
   } catch (error) {
     item.auditStatus = "failed";
-    item.auditError = sanitizeText(error instanceof Error ? error.message : "Audit indisponible.", 300);
+    item.auditError = describeNetworkError(error);
     item.audit = null;
     updatePriority(item);
   }
@@ -148,12 +198,35 @@ enrichProspects = async function enrichProspectsWithWorker(items, geo, formData)
     return FALLBACK_ENRICH_PROSPECTS(items, geo, formData);
   }
 
+  for (const item of items) {
+    item.websiteDiscoveryStatus = "searching";
+    item.auditStatus = null;
+  }
+  render();
+
+  try {
+    setProgress(46, "Connexion au backend sécurisé…");
+    await verifyWorkerHealth();
+  } catch (error) {
+    const message = describeNetworkError(error);
+    for (const item of items) {
+      item.websiteDiscoveryStatus = "enrichment_failed";
+      updatePriority(item);
+    }
+    persistItems();
+    render();
+    showNotice(message, "error");
+    setProgress(100, "Recherche terminée : backend indisponible.");
+    return;
+  }
+
   const batches = [];
   for (let index = 0; index < items.length; index += WORKER_CLIENT.batchSize) {
     batches.push(items.slice(index, index + WORKER_CLIENT.batchSize));
   }
 
   let enrichedCount = 0;
+  let failedBatches = 0;
   for (let index = 0; index < batches.length; index += 1) {
     const batch = batches[index];
     setProgress(
@@ -164,14 +237,12 @@ enrichProspects = async function enrichProspectsWithWorker(items, geo, formData)
     try {
       await enrichBatchWithWorker(batch, geo, formData);
     } catch (error) {
+      failedBatches += 1;
       for (const item of batch) {
         item.websiteDiscoveryStatus = "enrichment_failed";
         updatePriority(item);
       }
-      showNotice(
-        error instanceof Error ? error.message : "L’enrichissement backend a échoué.",
-        "warning"
-      );
+      showNotice(describeNetworkError(error), "warning");
     }
 
     enrichedCount += batch.length;
@@ -197,9 +268,16 @@ enrichProspects = async function enrichProspectsWithWorker(items, geo, formData)
   });
 
   for (const item of items) updatePriority(item);
+  persistItems();
+  render();
+
+  if (failedBatches === batches.length && batches.length > 0) {
+    setProgress(100, "Recherche terminée : enrichissement indisponible.");
+  }
 };
 
 auditWebsite = async function auditWebsiteWithWorker(item) {
   if (!getBackendBaseUrl()) return FALLBACK_AUDIT_WEBSITE(item);
+  await verifyWorkerHealth();
   return auditItemWithWorker(item);
 };
