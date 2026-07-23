@@ -11,7 +11,8 @@ const JSON_HEADERS = Object.freeze({
 const MAX_BUSINESSES = 50;
 const MAX_REQUEST_BYTES = 128_000;
 const CACHE_TTL_SECONDS = 86_400;
-const OVERPASS_TIMEOUT_MS = 9_000;
+const OVERPASS_TIMEOUT_MS = 8_000;
+const LOOKUP_RADIUS_METERS = 650;
 
 const DEFAULT_OVERPASS_ENDPOINTS = Object.freeze([
   "https://overpass-api.de/api/interpreter",
@@ -122,29 +123,33 @@ async function readJsonBody(request) {
   return payload;
 }
 
-function buildOverpassQuery(latitude, longitude, radiusKm, segment) {
-  const radiusMeters = Math.round(Math.min(50, Math.max(1, radiusKm)) * 1000);
-  const around = `(around:${radiusMeters},${latitude.toFixed(6)},${longitude.toFixed(6)})`;
+function normalizeBusinesses(rawBusinesses) {
+  return rawBusinesses
+    .slice(0, MAX_BUSINESSES)
+    .map((business) => ({
+      id: sanitizeText(business?.id, 80),
+      name: sanitizeText(business?.name, 220),
+      commercialName: sanitizeText(business?.commercialName, 220),
+      city: sanitizeText(business?.city, 120),
+      latitude: Number(business?.latitude),
+      longitude: Number(business?.longitude)
+    }))
+    .filter((business) => (
+      business.id
+      && business.name
+      && Number.isFinite(business.latitude)
+      && Number.isFinite(business.longitude)
+    ));
+}
 
-  const statements = {
-    fastfood: [
-      `nwr${around}["name"]["amenity"="fast_food"];`,
-      `nwr${around}["name"]["cuisine"~"(^|;)(kebab|burger|pizza)(;|$)",i];`
-    ],
-    restaurants: [
-      `nwr${around}["name"]["amenity"~"^(restaurant|cafe)$"];`
-    ],
-    food: [
-      `nwr${around}["name"]["amenity"~"^(restaurant|fast_food|cafe)$"];`
-    ],
-    building: [
-      `nwr${around}["name"]["craft"~"^(plumber|electrician|carpenter|roofer|painter|bricklayer|builder)$"];`,
-      `nwr${around}["name"]["office"="construction_company"];`
-    ]
-  }[segment];
+function buildTargetedOverpassQuery(businesses) {
+  const statements = businesses.map((business) => {
+    const latitude = business.latitude.toFixed(6);
+    const longitude = business.longitude.toFixed(6);
+    return `nwr(around:${LOOKUP_RADIUS_METERS},${latitude},${longitude})["name"][~"^(website|contact:website|url|phone|contact:phone|mobile|contact:mobile|facebook|contact:facebook|instagram|contact:instagram)$"~"."];`;
+  });
 
-  if (!statements) throw new HttpError(400, "Segment invalide.");
-  return `[out:json][timeout:12][maxsize:8388608];(${statements.join("")});out center tags qt 3000;`;
+  return `[out:json][timeout:8][maxsize:4194304];(${statements.join("")});out center tags qt 2500;`;
 }
 
 function getOverpassEndpoints(env) {
@@ -169,6 +174,7 @@ async function fetchWithTimeout(url, options, timeoutMs) {
 
 async function fetchOverpass(query, env) {
   const errors = [];
+
   for (const endpoint of getOverpassEndpoints(env)) {
     const startedAt = Date.now();
     try {
@@ -215,7 +221,7 @@ async function fetchOverpass(query, env) {
 
   throw new HttpError(
     503,
-    `OpenStreetMap est temporairement indisponible. ${errors.join(" ; ")}`
+    `Les serveurs OpenStreetMap ne répondent pas actuellement. ${errors.join(" ; ")}`
   );
 }
 
@@ -289,14 +295,14 @@ function mapOsmElements(payload) {
 function distanceKm(firstLatitude, firstLongitude, secondLatitude, secondLongitude) {
   if (![firstLatitude, firstLongitude, secondLatitude, secondLongitude].every(Number.isFinite)) return null;
   const toRadians = (value) => value * Math.PI / 180;
-  const radius = 6371;
+  const earthRadius = 6371;
   const latitudeDelta = toRadians(secondLatitude - firstLatitude);
   const longitudeDelta = toRadians(secondLongitude - firstLongitude);
   const a = Math.sin(latitudeDelta / 2) ** 2
     + Math.cos(toRadians(firstLatitude))
     * Math.cos(toRadians(secondLatitude))
     * Math.sin(longitudeDelta / 2) ** 2;
-  return radius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return earthRadius * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 function matchRecord(business, records) {
@@ -304,35 +310,35 @@ function matchRecord(business, records) {
   let best = null;
 
   for (const record of records) {
-    const nameScore = tokenSimilarity(expectedName, record.name);
-    if (nameScore < 0.35) continue;
-
     const distance = distanceKm(
       business.latitude,
       business.longitude,
       record.latitude,
       record.longitude
     );
+    if (distance !== null && distance > 0.8) continue;
+
+    const nameScore = tokenSimilarity(expectedName, record.name);
+    if (nameScore < 0.42) continue;
+
     const cityScore = business.city && record.address
       ? tokenSimilarity(business.city, record.address)
       : 0;
     const distanceScore = distance === null
       ? 0
-      : distance <= 0.3
+      : distance <= 0.15
         ? 1
-        : distance <= 1
-          ? 0.85
-          : distance <= 3
-            ? 0.55
-            : distance <= 6
-              ? 0.2
-              : 0;
-    const score = nameScore * 0.76 + distanceScore * 0.20 + cityScore * 0.04;
+        : distance <= 0.35
+          ? 0.8
+          : distance <= 0.65
+            ? 0.45
+            : 0.15;
+    const score = nameScore * 0.78 + distanceScore * 0.18 + cityScore * 0.04;
 
     if (!best || score > best.score) best = { record, score, distance };
   }
 
-  if (!best || best.score < 0.54 || (best.distance !== null && best.distance > 6)) return null;
+  if (!best || best.score < 0.58) return null;
   return best;
 }
 
@@ -345,33 +351,16 @@ async function applyRateLimit(request, env) {
 
 async function enrichBusinesses(request, env, origin) {
   const payload = await readJsonBody(request);
-  const latitude = Number(payload?.geo?.latitude);
-  const longitude = Number(payload?.geo?.longitude);
-  const radiusKm = Number(payload?.radiusKm || 20);
-  const segment = sanitizeText(payload?.segment, 30);
-  const businesses = Array.isArray(payload?.businesses)
-    ? payload.businesses.slice(0, MAX_BUSINESSES)
-    : [];
+  const businesses = normalizeBusinesses(
+    Array.isArray(payload?.businesses) ? payload.businesses : []
+  );
 
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    throw new HttpError(400, "Coordonnées géographiques invalides.");
-  }
-
-  const normalizedBusinesses = businesses.map((business) => ({
-    id: sanitizeText(business?.id, 80),
-    name: sanitizeText(business?.name, 220),
-    commercialName: sanitizeText(business?.commercialName, 220),
-    city: sanitizeText(business?.city, 120),
-    latitude: Number(business?.latitude),
-    longitude: Number(business?.longitude)
-  })).filter((business) => business.id && business.name);
-
-  if (!normalizedBusinesses.length) {
+  if (!businesses.length) {
     throw new HttpError(400, "Aucune entreprise valide à enrichir.");
   }
 
-  const query = buildOverpassQuery(latitude, longitude, radiusKm, segment);
-  const cacheKey = new Request(`https://cache.signallead.local/osm/${hashString(query)}`);
+  const query = buildTargetedOverpassQuery(businesses);
+  const cacheKey = new Request(`https://cache.signallead.local/osm-targeted/${hashString(query)}`);
   const cache = caches.default;
   const cached = await cache.match(cacheKey);
 
@@ -398,7 +387,7 @@ async function enrichBusinesses(request, env, origin) {
   }
 
   const records = mapOsmElements(overpassPayload);
-  const results = normalizedBusinesses.map((business) => {
+  const results = businesses.map((business) => {
     const match = matchRecord(business, records);
     if (!match) return { id: business.id, found: false, confidence: 0 };
 
@@ -419,11 +408,12 @@ async function enrichBusinesses(request, env, origin) {
   return json({
     results,
     meta: {
+      strategy: "targeted-near-businesses",
       endpoint,
       cache: cacheStatus,
       durationMs,
       records: records.length,
-      businesses: normalizedBusinesses.length
+      businesses: businesses.length
     }
   }, 200, {
     ...corsHeaders(origin),
