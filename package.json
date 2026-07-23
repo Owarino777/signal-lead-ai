@@ -1,0 +1,9 @@
+{
+  "name": "signal-lead-ai",
+  "version": "0.6.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  }
+}
