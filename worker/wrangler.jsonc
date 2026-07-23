@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "signal-lead-api",
-  "main": "src/index.js",
+  "main": "src/entry.js",
   "compatibility_date": "2026-07-23",
   "workers_dev": true,
   "observability": {
@@ -10,7 +10,7 @@
   },
   "vars": {
     "ALLOWED_ORIGINS": "https://owarino777.github.io",
-    "OVERPASS_ENDPOINT": "https://overpass.kumi.systems/api/interpreter"
+    "OVERPASS_ENDPOINTS": "https://overpass-api.de/api/interpreter,https://overpass.private.coffee/api/interpreter"
   },
   "ratelimits": [
     {
