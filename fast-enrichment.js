@@ -1,85 +1,164 @@
 "use strict";
 
 const FAST_ENRICHMENT = Object.freeze({
-  overpassEndpoint: "https://overpass.kumi.systems/api/interpreter",
-  dnsEndpoint: "https://cloudflare-dns.com/dns-query",
-  overpassTimeoutMs: 8000,
-  dnsTimeoutMs: 2500,
-  proxyTimeoutMs: 6500,
-  domainProspectLimit: 8,
-  auditLimit: 8,
-  domainCandidatesPerProspect: 3,
-  concurrency: 2
+  lookupLimit: 6,
+  auditLimit: 3,
+  requestDelayMs: 1100,
+  websiteTimeoutMs: 5000,
+  auditConcurrency: 2
 });
 
 const ORIGINAL_CONTAINS_EXCLUDED_BRAND = containsExcludedBrand;
+const ORIGINAL_CALCULATE_SITE_NEED = calculateSiteNeed;
+const ORIGINAL_GET_SITE_STATUS = getSiteStatus;
 
-containsExcludedBrand = function containsExcludedBrandFastPatch(...values) {
+containsExcludedBrand = function containsExcludedBrandPatched(...values) {
   if (ORIGINAL_CONTAINS_EXCLUDED_BRAND(...values)) return true;
   const normalized = normalizeWords(values.filter(Boolean).join(" "));
-  return ["bchef", "black and white burger", "chamas tacos", "nabab kebab"]
-    .some((brand) => normalized.includes(normalizeWords(brand)));
+  return [
+    "bchef",
+    "black and white burger",
+    "chamas tacos",
+    "nabab kebab",
+    "otacos",
+    "o tacos",
+    "pokawa",
+    "sushi shop",
+    "brioche doree",
+    "refectory"
+  ].some((brand) => normalized.includes(normalizeWords(brand)));
 };
 
-fetchOverpass = async function fetchOverpassThroughSingleProxy(query) {
-  const overpassUrl = `${FAST_ENRICHMENT.overpassEndpoint}?${new URLSearchParams({ data: query })}`;
-  const proxyUrl = `${CONFIG.allOriginsEndpoint}?${new URLSearchParams({ url: overpassUrl })}`;
-  const response = await fetchWithTimeout(proxyUrl, {
-    headers: { Accept: "application/json,text/plain;q=0.9" }
-  }, FAST_ENRICHMENT.overpassTimeoutMs);
-
-  if (!response.ok) {
-    throw new Error(`OpenStreetMap est temporairement indisponible (${response.status}).`);
+calculateSiteNeed = function calculateVerifiedSiteNeed(prospect) {
+  if (prospect.noSiteConfirmed || prospect.audit) {
+    return ORIGINAL_CALCULATE_SITE_NEED(prospect);
   }
-
-  const text = await response.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error("OpenStreetMap a renvoyé une réponse inexploitable.");
-  }
+  return null;
 };
 
-buildDomainCandidates = function buildReducedDomainCandidates(item) {
-  const primaryName = slugify(item.commercialName || item.name);
-  const city = slugify(item.city);
-  if (primaryName.length < 4) return [];
+function wait(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
 
-  const candidates = [
-    `${primaryName}.fr`,
-    city ? `${primaryName}-${city}.fr` : null,
-    `${primaryName}.com`
-  ].filter(Boolean);
+function getNominatimName(result) {
+  return sanitizeText(firstDefined(
+    result?.namedetails?.name,
+    result?.namedetails?.brand,
+    result?.namedetails?.operator,
+    result?.name,
+    String(result?.display_name || "").split(",")[0]
+  ), 220);
+}
 
-  return [...new Set(candidates)]
-    .slice(0, FAST_ENRICHMENT.domainCandidatesPerProspect)
-    .map((hostname) => `https://${hostname}/`);
-};
+function getNominatimWebsite(result) {
+  const tags = result?.extratags || {};
+  return normalizeUrl(firstDefined(
+    tags["contact:website"],
+    tags.website,
+    tags.url,
+    tags["contact:url"]
+  ));
+}
 
-async function dnsHostnameExists(hostname) {
+function getNominatimPhone(result) {
+  const tags = result?.extratags || {};
+  return sanitizeText(firstDefined(
+    tags["contact:phone"],
+    tags.phone,
+    tags["contact:mobile"],
+    tags.mobile
+  ), 60) || null;
+}
+
+function getNominatimSocial(result) {
+  const tags = result?.extratags || {};
+  return [
+    tags["contact:facebook"],
+    tags.facebook,
+    tags["contact:instagram"],
+    tags.instagram
+  ].filter(Boolean).map((value) => sanitizeText(value, 240)).slice(0, 4);
+}
+
+function scoreNominatimResult(item, result) {
+  const resultName = getNominatimName(result);
+  const nameScore = tokenSimilarity(item.commercialName || item.name, resultName);
+  const latitude = Number(result?.lat);
+  const longitude = Number(result?.lon);
+  const distance = distanceKm(item.latitude, item.longitude, latitude, longitude);
+  const displayName = normalizeWords(result?.display_name || "");
+  const city = normalizeWords(item.city);
+  const cityScore = city && displayName.includes(city) ? 1 : 0;
+  const distanceScore = distance === null
+    ? 0
+    : distance <= 0.5
+      ? 1
+      : distance <= 2
+        ? 0.75
+        : distance <= 5
+          ? 0.35
+          : 0;
+
+  return {
+    result,
+    resultName,
+    distance,
+    score: nameScore * 0.72 + cityScore * 0.16 + distanceScore * 0.12
+  };
+}
+
+async function lookupBusinessInNominatim(item) {
+  const query = [
+    item.commercialName || item.name,
+    item.city,
+    "France"
+  ].filter(Boolean).join(", ");
+
   const params = new URLSearchParams({
-    name: hostname,
-    type: "A"
+    q: query,
+    format: "jsonv2",
+    limit: "3",
+    countrycodes: "fr",
+    addressdetails: "1",
+    extratags: "1",
+    namedetails: "1",
+    dedupe: "1"
   });
 
-  try {
-    const response = await fetchWithTimeout(
-      `${FAST_ENRICHMENT.dnsEndpoint}?${params}`,
-      { headers: { Accept: "application/dns-json" } },
-      FAST_ENRICHMENT.dnsTimeoutMs
-    );
-    if (!response.ok) return false;
-    const payload = await response.json();
-    return payload?.Status === 0 && Array.isArray(payload.Answer) && payload.Answer.some((answer) => {
-      const type = Number(answer?.type);
-      return type === 1 || type === 5 || type === 28;
-    });
-  } catch {
-    return false;
+  const payload = await fetchJson(`${CONFIG.nominatimEndpoint}?${params}`, 9000);
+  const candidates = Array.isArray(payload)
+    ? payload.map((result) => scoreNominatimResult(item, result)).sort((left, right) => right.score - left.score)
+    : [];
+  const best = candidates[0];
+
+  if (!best || best.score < 0.5 || (best.distance !== null && best.distance > 6)) {
+    item.websiteDiscoveryStatus = "not_found";
+    item.osmMatch = null;
+    return;
+  }
+
+  item.osmMatch = {
+    name: best.resultName,
+    confidence: Number(best.score.toFixed(2)),
+    distanceKm: best.distance === null ? null : Number(best.distance.toFixed(2))
+  };
+  item.phone = getNominatimPhone(best.result) || item.phone;
+  item.social = getNominatimSocial(best.result);
+  item.openingHours = sanitizeText(best.result?.extratags?.opening_hours, 300) || item.openingHours;
+
+  const website = getNominatimWebsite(best.result);
+  if (website) {
+    item.website = website;
+    item.websiteSource = "OpenStreetMap / Nominatim";
+    item.websiteConfidence = best.score;
+    item.websiteDiscoveryStatus = "found";
+    item.noSiteConfirmed = false;
+  } else {
+    item.websiteDiscoveryStatus = "place_without_website";
   }
 }
 
-fetchWebsiteContent = async function fetchWebsiteContentFast(url) {
+fetchWebsiteContent = async function fetchWebsiteContentPatched(url) {
   const normalized = normalizeUrl(url);
   if (!normalized) throw new Error("URL invalide.");
 
@@ -88,7 +167,7 @@ fetchWebsiteContent = async function fetchWebsiteContentFast(url) {
     const response = await fetchWithTimeout(
       allOriginsUrl,
       { headers: { Accept: "text/html,text/plain;q=0.9" } },
-      FAST_ENRICHMENT.proxyTimeoutMs
+      FAST_ENRICHMENT.websiteTimeoutMs
     );
     if (response.ok) {
       const html = await response.text();
@@ -101,14 +180,14 @@ fetchWebsiteContent = async function fetchWebsiteContentFast(url) {
       }
     }
   } catch {
-    // Continue with the reader fallback.
+    // Continue with the text reader fallback.
   }
 
   const readerUrl = `${CONFIG.jinaEndpoint}${normalized.replace(/^https?:\/\//i, "")}`;
   const response = await fetchWithTimeout(
     readerUrl,
     { headers: { Accept: "text/plain" } },
-    FAST_ENRICHMENT.proxyTimeoutMs
+    FAST_ENRICHMENT.websiteTimeoutMs
   );
   if (!response.ok) throw new Error(`Lecture du site indisponible (${response.status}).`);
   const text = await response.text();
@@ -120,101 +199,79 @@ fetchWebsiteContent = async function fetchWebsiteContentFast(url) {
   };
 };
 
-discoverDomainForItem = async function discoverDomainWithDnsPreflight(item) {
-  for (const candidate of buildDomainCandidates(item)) {
-    const hostname = new URL(candidate).hostname;
-    const exists = await dnsHostnameExists(hostname);
-    if (!exists) continue;
-
-    try {
-      const document = await fetchWebsiteContent(candidate);
-      const confidence = domainIdentityScore(item, candidate, document.content);
-      if (confidence >= 0.52) {
-        item.website = candidate;
-        item.websiteSource = "Domaine détecté automatiquement";
-        item.websiteConfidence = confidence;
-        item.websiteDiscoveryStatus = "found";
-        return true;
-      }
-    } catch {
-      // A registered domain may still refuse automated reading.
-    }
+getSiteStatus = function getVerifiedSiteStatus(item) {
+  if (item.noSiteConfirmed) return { label: "Aucun site confirmé", className: "bad" };
+  if (item.audit) return { label: "Site trouvé et analysé", className: "good" };
+  if (item.website && item.auditStatus === "failed") return { label: "Site trouvé, analyse impossible", className: "neutral" };
+  if (item.website) return { label: "Site trouvé automatiquement", className: "neutral" };
+  if (item.websiteDiscoveryStatus === "place_without_website") {
+    return { label: "Établissement trouvé, site non renseigné", className: "pending" };
   }
-
-  item.websiteDiscoveryStatus = "not_found";
-  return false;
-};
-
-const ORIGINAL_GET_SITE_STATUS = getSiteStatus;
-
-getSiteStatus = function getFastSiteStatus(item) {
+  if (item.websiteDiscoveryStatus === "not_found") {
+    return { label: "Site non identifié", className: "pending" };
+  }
   if (item.websiteDiscoveryStatus === "deferred") {
-    return { label: "Analyse différée", className: "pending" };
+    return { label: "À enrichir", className: "pending" };
   }
   return ORIGINAL_GET_SITE_STATUS(item);
 };
 
-enrichProspects = async function enrichProspectsFast(items, geo, formData) {
-  setProgress(52, "Recherche des sites déclarés dans OpenStreetMap…");
+enrichProspects = async function enrichProspectsWithNominatim(items) {
+  const ordered = [...items].sort((left, right) => right.businessScore - left.businessScore);
+  const toLookup = ordered.slice(0, FAST_ENRICHMENT.lookupLimit);
+  const deferred = ordered.slice(FAST_ENRICHMENT.lookupLimit);
 
-  try {
-    const query = buildOverpassQuery(geo, formData.radiusKm, SEGMENTS[formData.category]);
-    const overpass = await fetchOverpass(query);
-    applyOsmMatches(items, mapOsmElements(overpass));
-  } catch {
-    showNotice(
-      "OpenStreetMap n’a pas répondu en moins de 8 secondes. La recherche continue sans bloquer l’application.",
-      "warning"
-    );
-  }
-
-  const unresolved = items
-    .filter((item) => !item.website)
-    .sort((left, right) => right.businessScore - left.businessScore);
-
-  const toCheck = unresolved.slice(0, FAST_ENRICHMENT.domainProspectLimit);
-  const deferred = unresolved.slice(FAST_ENRICHMENT.domainProspectLimit);
   for (const item of deferred) {
     item.websiteDiscoveryStatus = "deferred";
     updatePriority(item);
   }
 
-  if (toCheck.length) {
-    let completed = 0;
-    setProgress(64, `Vérification DNS des domaines plausibles (0/${toCheck.length})…`);
+  for (let index = 0; index < toLookup.length; index += 1) {
+    const item = toLookup[index];
+    item.websiteDiscoveryStatus = "searching";
+    render();
+    setProgress(
+      56 + Math.round((index / Math.max(1, toLookup.length)) * 20),
+      `Identification ciblée des sites (${index + 1}/${toLookup.length})…`
+    );
 
-    await mapWithConcurrency(toCheck, FAST_ENRICHMENT.concurrency, async (item) => {
-      await discoverDomainForItem(item);
-      updatePriority(item);
-      completed += 1;
-      setProgress(
-        64 + Math.round((completed / toCheck.length) * 14),
-        `Vérification DNS des domaines plausibles (${completed}/${toCheck.length})…`
-      );
-    });
-  }
-
-  for (const item of items) {
-    if (!item.website && item.websiteDiscoveryStatus === "pending") {
+    try {
+      await lookupBusinessInNominatim(item);
+    } catch {
       item.websiteDiscoveryStatus = "not_found";
     }
+
     updatePriority(item);
+    persistItems();
+    render();
+
+    if (index < toLookup.length - 1) {
+      await wait(FAST_ENRICHMENT.requestDelayMs);
+    }
   }
 
-  const auditable = items
+  const auditable = ordered
     .filter((item) => item.website)
-    .sort((left, right) => right.businessScore - left.businessScore)
     .slice(0, FAST_ENRICHMENT.auditLimit);
 
   if (auditable.length) {
     let completed = 0;
-    await mapWithConcurrency(auditable, FAST_ENRICHMENT.concurrency, async (item) => {
+    await mapWithConcurrency(auditable, FAST_ENRICHMENT.auditConcurrency, async (item) => {
       await auditWebsite(item);
+      updatePriority(item);
       completed += 1;
       setProgress(
         80 + Math.round((completed / auditable.length) * 17),
-        `Analyse des sites retrouvés (${completed}/${auditable.length})…`
+        `Analyse des sites identifiés (${completed}/${auditable.length})…`
       );
+      persistItems();
+      render();
     });
   }
+
+  for (const item of items) updatePriority(item);
 };
+
+for (const item of state.items) updatePriority(item);
+persistItems();
+render();
