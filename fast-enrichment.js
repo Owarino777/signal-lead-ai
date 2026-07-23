@@ -11,6 +11,43 @@ const FAST_ENRICHMENT = Object.freeze({
 const ORIGINAL_CONTAINS_EXCLUDED_BRAND = containsExcludedBrand;
 const ORIGINAL_CALCULATE_SITE_NEED = calculateSiteNeed;
 const ORIGINAL_GET_SITE_STATUS = getSiteStatus;
+const ORIGINAL_SHOW_NOTICE = showNotice;
+
+showNotice = function showClearNotice(message, kind = "info") {
+  const text = String(message ?? "");
+  const match = text.match(/^(\d+) prospects prioritaires détectés sans service payant\.$/);
+
+  if (match) {
+    const backendFailed = state.items.some(
+      (item) => item.websiteDiscoveryStatus === "enrichment_failed"
+    );
+
+    if (backendFailed) {
+      ORIGINAL_SHOW_NOTICE(
+        "Recherche des entreprises terminée, mais l’enrichissement Cloudflare est indisponible. Aucun paiement n’est demandé.",
+        "warning"
+      );
+      return;
+    }
+
+    const count = Number(match[1]);
+    if (count === 0) {
+      ORIGINAL_SHOW_NOTICE(
+        "Recherche terminée : aucun prospect prioritaire n’a encore été confirmé. Aucun paiement requis.",
+        "info"
+      );
+      return;
+    }
+
+    ORIGINAL_SHOW_NOTICE(
+      `${count} prospect${count > 1 ? "s" : ""} prioritaire${count > 1 ? "s" : ""} confirmé${count > 1 ? "s" : ""}. Aucun paiement requis.`,
+      kind
+    );
+    return;
+  }
+
+  ORIGINAL_SHOW_NOTICE(message, kind);
+};
 
 containsExcludedBrand = function containsExcludedBrandPatched(...values) {
   if (ORIGINAL_CONTAINS_EXCLUDED_BRAND(...values)) return true;
