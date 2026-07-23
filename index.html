@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#17324d">
   <meta name="description" content="SignalLead aide à qualifier les restaurants, fast-foods et entreprises du bâtiment selon leur potentiel commercial et le besoin réel de leur site internet.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.microlink.io; connect-src 'self' https://nominatim.openstreetmap.org https://recherche-entreprises.api.gouv.fr https://api.microlink.io https://*.microlink.io; font-src 'self'; upgrade-insecure-requests">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self' https://overpass.kumi.systems https://overpass.private.coffee https://overpass-api.de; style-src 'self'; img-src 'self' data: https://image.thum.io; connect-src 'self' https://nominatim.openstreetmap.org https://recherche-entreprises.api.gouv.fr https://overpass.kumi.systems https://overpass.private.coffee https://overpass-api.de https://api.allorigins.win https://r.jina.ai; font-src 'self'; upgrade-insecure-requests">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <title>SignalLead — Prospects locaux qualifiés</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317324d'/%3E%3Cpath d='M17 45V19h8l7 10 7-10h8v26h-8V31l-7 9-7-9v14z' fill='%23ff7a59'/%3E%3C/svg%3E">
@@ -31,7 +31,7 @@
 
       <div class="source-note">
         <strong>Données utilisées</strong>
-        <p>Registre Sirene et données financières publiques. Les associations et organismes publics sont exclus.</p>
+        <p>Registre Sirene, OpenStreetMap et vérification automatique de domaines publics. Aucun service Google payant.</p>
         <a href="https://annuaire-entreprises.data.gouv.fr/" target="_blank" rel="noopener noreferrer">Consulter la source</a>
       </div>
     </aside>
@@ -52,30 +52,30 @@
           <div>
             <p class="eyebrow">Prioriser avant de contacter</p>
             <h2 id="intro-title">Un bon prospect doit avoir les moyens <em>et</em> un besoin réel.</h2>
-            <p>Le potentiel de l’entreprise et la qualité de son site sont évalués séparément. La priorité finale n’est affichée qu’après vérification du site ou confirmation de son absence.</p>
+            <p>SignalLead recherche automatiquement les sites déclarés, teste des domaines plausibles et analyse les meilleurs résultats avec des services gratuits. La saisie d’URL reste seulement une correction exceptionnelle.</p>
           </div>
           <div class="method-steps" aria-label="Méthode de qualification">
             <span><b>1</b> Trouver</span>
-            <span><b>2</b> Vérifier le site</span>
-            <span><b>3</b> Prioriser</span>
+            <span><b>2</b> Identifier le site</span>
+            <span><b>3</b> Analyser</span>
           </div>
         </section>
 
         <section class="summary-grid" aria-label="Résumé des résultats">
-          <article class="summary-card"><span>Prospects trouvés</span><strong id="summary-total">0</strong><small>entreprises actives</small></article>
-          <article class="summary-card"><span>Sites vérifiés</span><strong id="summary-audited">0</strong><small>audit ou absence confirmée</small></article>
-          <article class="summary-card"><span>Priorité élevée</span><strong id="summary-high">0</strong><small>besoin et capacité validés</small></article>
-          <article class="summary-card"><span>À qualifier</span><strong id="summary-pending">0</strong><small>site encore inconnu</small></article>
+          <article class="summary-card"><span>Prospects trouvés</span><strong id="summary-total">0</strong><small>entreprises actives ciblées</small></article>
+          <article class="summary-card"><span>Sites analysés</span><strong id="summary-audited">0</strong><small>analyse automatique ou confirmation</small></article>
+          <article class="summary-card"><span>Priorité élevée</span><strong id="summary-high">0</strong><small>besoin et capacité détectés</small></article>
+          <article class="summary-card"><span>Sites non retrouvés</span><strong id="summary-pending">0</strong><small>à vérifier exceptionnellement</small></article>
         </section>
 
         <section class="card search-card" id="search" aria-labelledby="search-title">
           <div class="section-heading">
             <div>
               <p class="eyebrow">Recherche</p>
-              <h2 id="search-title">Trouver des entreprises</h2>
-              <p>SignalLead cible uniquement les secteurs choisis et exclut les associations, administrations et grandes structures peu accessibles commercialement.</p>
+              <h2 id="search-title">Trouver et analyser des entreprises</h2>
+              <p>Les associations, administrations, chaînes connues, ETI, grandes entreprises et structures trop importantes sont automatiquement exclues.</p>
             </div>
-            <span class="source-badge">Source officielle</span>
+            <span class="source-badge">100 % gratuit</span>
           </div>
 
           <form id="search-form" class="search-form">
@@ -117,7 +117,7 @@
             <button class="button button-primary search-submit" id="launch" type="submit">Lancer la recherche</button>
           </form>
           <div class="progress" aria-hidden="true"><span id="progress"></span></div>
-          <p class="progress-text" id="progress-text">Prêt à rechercher.</p>
+          <p class="progress-text" id="progress-text">Prêt à rechercher automatiquement les entreprises et leurs sites.</p>
         </section>
 
         <section class="card results-card" id="prospects" aria-labelledby="prospects-title">
@@ -134,12 +134,12 @@
               <select id="qualification-filter">
                 <option value="all">Toutes les qualifications</option>
                 <option value="high">Priorité élevée</option>
-                <option value="audited">Site vérifié</option>
-                <option value="pending">Site à qualifier</option>
+                <option value="audited">Site analysé</option>
+                <option value="pending">Site non retrouvé</option>
               </select>
               <label class="visually-hidden" for="sort">Trier les résultats</label>
               <select id="sort">
-                <option value="priority">Priorité validée</option>
+                <option value="priority">Priorité calculée</option>
                 <option value="business">Potentiel entreprise</option>
                 <option value="site">Besoin du site</option>
                 <option value="revenue">Chiffre d’affaires</option>
@@ -165,7 +165,7 @@
           </div>
           <div class="empty-state" id="empty-state">
             <strong>Aucun prospect pour le moment</strong>
-            <p>Lance une recherche pour afficher les entreprises à qualifier.</p>
+            <p>Lance une recherche pour détecter automatiquement les entreprises et leurs sites.</p>
           </div>
         </section>
       </main>
@@ -194,30 +194,30 @@
 
       <section class="dialog-section site-section" aria-labelledby="site-title">
         <div class="section-heading compact">
-          <div><p class="eyebrow">Site internet</p><h3 id="site-title">Vérifier le besoin réel</h3></div>
+          <div><p class="eyebrow">Site internet</p><h3 id="site-title">Analyse automatique du besoin</h3></div>
           <div class="score-pill neutral" id="dialog-site-score">À vérifier</div>
         </div>
 
         <div class="site-toolbar">
           <div class="field site-url-field">
-            <label for="site-url">URL du site officiel</label>
-            <input id="site-url" type="url" maxlength="2048" placeholder="https://exemple.fr">
+            <label for="site-url">URL détectée ou correction manuelle</label>
+            <input id="site-url" type="url" maxlength="2048" placeholder="Site non retrouvé automatiquement">
           </div>
-          <button class="button button-secondary" id="find-site" type="button">Rechercher le site</button>
-          <button class="button button-secondary" id="save-site" type="button">Enregistrer</button>
-          <button class="button button-primary" id="audit-site" type="button">Analyser le site</button>
+          <button class="button button-secondary" id="find-site" type="button">Recherche externe</button>
+          <button class="button button-secondary" id="save-site" type="button">Corriger l’URL</button>
+          <button class="button button-primary" id="audit-site" type="button">Relancer l’analyse</button>
         </div>
 
         <label class="confirmation-control">
           <input id="no-site-confirmed" type="checkbox">
-          <span><strong>Aucun site officiel trouvé</strong><small>À cocher uniquement après vérification.</small></span>
+          <span><strong>Confirmer l’absence de site</strong><small>Seulement lorsque la recherche automatique n’a rien trouvé et après contrôle.</small></span>
         </label>
 
         <div class="site-audit-layout">
           <div class="website-preview" id="website-preview">
             <div class="preview-placeholder">
               <strong>Aperçu indisponible</strong>
-              <p>Enregistre une URL puis lance l’analyse pour obtenir une capture du site.</p>
+              <p>La capture apparaîtra lorsqu’un site aura été trouvé et analysé.</p>
             </div>
           </div>
           <div>
@@ -230,8 +230,8 @@
         </div>
 
         <fieldset class="manual-review">
-          <legend>Contrôle visuel rapide</legend>
-          <p>Ces observations complètent les mesures automatiques et évitent de contacter une entreprise dont le site est déjà satisfaisant.</p>
+          <legend>Contrôle visuel facultatif</legend>
+          <p>Le contrôle manuel sert uniquement à affiner le résultat automatique lorsque la capture est ambiguë.</p>
           <div class="check-grid">
             <label><input type="checkbox" value="datedDesign"> Design visuellement daté</label>
             <label><input type="checkbox" value="poorMobile"> Affichage mobile peu convaincant</label>
