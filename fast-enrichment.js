@@ -263,3 +263,16 @@ enrichProspects = async function enrichProspectsWithNominatim(items) {
 for (const item of state.items) updatePriority(item);
 persistItems();
 render();
+
+(function loadCloudflareClient() {
+  const configScript = document.createElement("script");
+  configScript.src = "backend-config.js";
+  configScript.defer = true;
+  configScript.addEventListener("load", () => {
+    const clientScript = document.createElement("script");
+    clientScript.src = "worker-client.js";
+    clientScript.defer = true;
+    document.head.append(clientScript);
+  });
+  document.head.append(configScript);
+})();
