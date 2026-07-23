@@ -27,6 +27,24 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Prepare static build
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("index.html")
+          html = path.read_text(encoding="utf-8")
+          html = html.replace(
+              "https://api.microlink.io https://*.microlink.io;",
+              "https://api.microlink.io https://*.microlink.io https://signal-lead-ai.vercel.app;"
+          )
+          marker = '<script src="app.js" defer></script>'
+          addition = marker + '\n  <script src="enrichment.js" defer></script>'
+          if 'src="enrichment.js"' not in html:
+              html = html.replace(marker, addition)
+          path.write_text(html, encoding="utf-8")
+          PY
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
