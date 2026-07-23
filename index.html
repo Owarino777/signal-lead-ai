@@ -3,183 +3,266 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#070b17">
-  <meta name="description" content="SignalLead AI classe les restaurants, fast-foods et entreprises du bâtiment selon leur potentiel commercial à partir de données publiques officielles.">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://nominatim.openstreetmap.org https://recherche-entreprises.api.gouv.fr; frame-src https:; font-src 'self'; upgrade-insecure-requests">
+  <meta name="theme-color" content="#17324d">
+  <meta name="description" content="SignalLead aide à qualifier les restaurants, fast-foods et entreprises du bâtiment selon leur potentiel commercial et le besoin réel de leur site internet.">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'none'; object-src 'none'; form-action 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://*.microlink.io; connect-src 'self' https://nominatim.openstreetmap.org https://recherche-entreprises.api.gouv.fr https://api.microlink.io https://*.microlink.io; font-src 'self'; upgrade-insecure-requests">
   <meta name="referrer" content="strict-origin-when-cross-origin">
-  <title>SignalLead AI — Prospection locale intelligente</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070b17'/%3E%3Cpath d='M15 42V22h8l9 12 9-12h8v20h-8V34l-9 11-9-11v8z' fill='%23a970ff'/%3E%3C/svg%3E">
+  <title>SignalLead — Prospects locaux qualifiés</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2317324d'/%3E%3Cpath d='M17 45V19h8l7 10 7-10h8v26h-8V31l-7 9-7-9v14z' fill='%23ff7a59'/%3E%3C/svg%3E">
   <link rel="stylesheet" href="styles.css">
-  <link rel="stylesheet" href="enhancements.css">
-  <script src="api-compat.js"></script>
   <script src="app.js" defer></script>
 </head>
 <body>
   <a class="skip-link" href="#main-content">Aller au contenu principal</a>
 
   <div class="app-shell">
-    <aside class="sidebar" aria-label="Barre latérale">
-      <div class="brand">SignalLead <span>AI</span></div>
-      <button class="primary-action" id="new-search" type="button">＋ Nouvelle recherche</button>
+    <aside class="sidebar" aria-label="Navigation principale">
+      <a class="brand" href="#dashboard" aria-label="SignalLead, accueil">
+        <span class="brand-mark" aria-hidden="true">S</span>
+        <span>SignalLead</span>
+      </a>
 
-      <nav class="navigation" aria-label="Navigation principale">
-        <button type="button" aria-current="page">Tableau de bord</button>
-        <button type="button">Recherches</button>
-        <button type="button">Prospects</button>
-        <button type="button">Exports</button>
+      <nav class="side-nav">
+        <a class="active" href="#dashboard">Vue d’ensemble</a>
+        <a href="#search">Nouvelle recherche</a>
+        <a href="#prospects">Prospects</a>
+        <button id="export-button" type="button">Exporter les résultats</button>
       </nav>
 
-      <section class="source-card" aria-labelledby="source-title">
-        <strong id="source-title">Sources officielles</strong>
-        <p>Registre Sirene via l’Annuaire des Entreprises. Les associations, administrations et services publics sont exclus du classement.</p>
-        <a href="https://annuaire-entreprises.data.gouv.fr/" target="_blank" rel="noopener noreferrer">Annuaire des Entreprises</a>
-      </section>
+      <div class="source-note">
+        <strong>Données utilisées</strong>
+        <p>Registre Sirene et données financières publiques. Les associations et organismes publics sont exclus.</p>
+        <a href="https://annuaire-entreprises.data.gouv.fr/" target="_blank" rel="noopener noreferrer">Consulter la source</a>
+      </div>
     </aside>
 
     <div class="workspace">
       <header class="topbar">
         <div>
-          <strong>Détection d’opportunités commerciales</strong>
-          <small>Restaurants, restauration rapide et bâtiment — capacité d’achat estimée et données vérifiables</small>
+          <p class="eyebrow">Prospection locale</p>
+          <h1>Prospects à fort besoin numérique</h1>
         </div>
-        <button class="secondary-button" id="export-button" type="button">Exporter en CSV</button>
+        <button class="button button-secondary" id="new-search" type="button">Nouvelle recherche</button>
       </header>
 
       <main id="main-content">
         <div class="notice" id="notice" role="status" aria-live="polite" hidden></div>
 
-        <section class="hero" aria-labelledby="hero-title">
+        <section class="intro" id="dashboard" aria-labelledby="intro-title">
           <div>
-            <h1 id="hero-title">Priorisez les entreprises locales avec le <span>meilleur potentiel d’achat.</span></h1>
-            <p>SignalLead cible les métiers qui dépendent fortement de leur visibilité locale, écarte les structures sans budget évident et classe les entreprises selon leur taille, leur ancienneté, leurs établissements, leur statut employeur et leurs données financières publiques.</p>
+            <p class="eyebrow">Prioriser avant de contacter</p>
+            <h2 id="intro-title">Un bon prospect doit avoir les moyens <em>et</em> un besoin réel.</h2>
+            <p>Le potentiel de l’entreprise et la qualité de son site sont évalués séparément. La priorité finale n’est affichée qu’après vérification du site ou confirmation de son absence.</p>
           </div>
-          <div class="score-preview" aria-label="Exemple de priorité commerciale : 87 sur 100">
-            <div class="score-ring"><strong>87<small>/100</small></strong></div>
+          <div class="method-steps" aria-label="Méthode de qualification">
+            <span><b>1</b> Trouver</span>
+            <span><b>2</b> Vérifier le site</span>
+            <span><b>3</b> Prioriser</span>
           </div>
         </section>
 
-        <div class="workflow">
-          <section class="panel search-panel" aria-labelledby="search-title">
-            <div class="panel-heading">
-              <div>
-                <h2 id="search-title">Définir la recherche</h2>
-                <p>Les entreprises actives sont trouvées automatiquement autour de la zone choisie.</p>
-              </div>
-              <span class="mode-badge">Associations exclues</span>
+        <section class="summary-grid" aria-label="Résumé des résultats">
+          <article class="summary-card"><span>Prospects trouvés</span><strong id="summary-total">0</strong><small>entreprises actives</small></article>
+          <article class="summary-card"><span>Sites vérifiés</span><strong id="summary-audited">0</strong><small>audit ou absence confirmée</small></article>
+          <article class="summary-card"><span>Priorité élevée</span><strong id="summary-high">0</strong><small>besoin et capacité validés</small></article>
+          <article class="summary-card"><span>À qualifier</span><strong id="summary-pending">0</strong><small>site encore inconnu</small></article>
+        </section>
+
+        <section class="card search-card" id="search" aria-labelledby="search-title">
+          <div class="section-heading">
+            <div>
+              <p class="eyebrow">Recherche</p>
+              <h2 id="search-title">Trouver des entreprises</h2>
+              <p>SignalLead cible uniquement les secteurs choisis et exclut les associations, administrations et grandes structures peu accessibles commercialement.</p>
             </div>
-
-            <form id="search-form">
-              <div class="field">
-                <label for="service">Que vendez-vous ?</label>
-                <input id="service" name="service" type="text" maxlength="160" required value="Création et refonte de sites web" autocomplete="off">
-              </div>
-
-              <div class="field">
-                <label for="category">Segment ciblé</label>
-                <select id="category" name="category">
-                  <option value="fastfood" selected>Fast-foods, kebabs et restauration rapide</option>
-                  <option value="restaurants">Restaurants traditionnels et cafétérias</option>
-                  <option value="food">Toute la restauration</option>
-                  <option value="building">Entreprises du bâtiment</option>
-                </select>
-              </div>
-
-              <div class="field">
-                <label for="location">Ville ou zone</label>
-                <input id="location" name="location" type="text" maxlength="120" required value="Caen, Normandie" autocomplete="address-level2">
-              </div>
-
-              <div class="field-grid">
-                <div class="field">
-                  <label for="radius">Rayon</label>
-                  <select id="radius" name="radius">
-                    <option value="5">5 km</option>
-                    <option value="10">10 km</option>
-                    <option value="20" selected>20 km</option>
-                    <option value="30">30 km</option>
-                    <option value="50">50 km</option>
-                  </select>
-                </div>
-                <div class="field">
-                  <label for="result-limit">Nombre de résultats</label>
-                  <select id="result-limit" name="resultLimit">
-                    <option value="10">10</option>
-                    <option value="25">25</option>
-                    <option value="50" selected>50</option>
-                  </select>
-                </div>
-              </div>
-
-              <button class="launch-button" id="launch" type="submit">Trouver et classer les entreprises</button>
-              <div class="progress-track" aria-hidden="true"><span id="progress"></span></div>
-              <p class="form-help" id="progress-text">Le score ne suppose pas qu’un site est mauvais : il évalue d’abord la capacité et l’intérêt commercial de l’entreprise.</p>
-            </form>
-          </section>
-
-          <section class="panel results-panel" aria-labelledby="results-title">
-            <div class="results-toolbar">
-              <div>
-                <h2 id="results-title">Prospects classés</h2>
-                <small id="result-count">0 prospect</small>
-              </div>
-              <div class="toolbar-controls">
-                <label class="visually-hidden" for="filter">Filtrer les prospects</label>
-                <input id="filter" type="search" maxlength="120" placeholder="Nom, activité, ville…">
-
-                <label class="visually-hidden" for="budget-filter">Filtrer par budget</label>
-                <select id="budget-filter">
-                  <option value="all">Tous les budgets</option>
-                  <option value="high">Budget fort</option>
-                  <option value="medium">Budget moyen ou fort</option>
-                </select>
-
-                <label class="visually-hidden" for="website-filter">Filtrer par site</label>
-                <select id="website-filter">
-                  <option value="all">Tous les sites</option>
-                  <option value="known">Site renseigné</option>
-                  <option value="unknown">Site à rechercher</option>
-                </select>
-
-                <label class="visually-hidden" for="sort">Trier les prospects</label>
-                <select id="sort">
-                  <option value="score">Priorité décroissante</option>
-                  <option value="budget">Budget estimé</option>
-                  <option value="revenue">Chiffre d’affaires public</option>
-                  <option value="employees">Effectif décroissant</option>
-                  <option value="recent">Création la plus récente</option>
-                  <option value="name">Nom alphabétique</option>
-                </select>
-              </div>
-            </div>
-            <div class="result-list" id="results"></div>
-          </section>
-        </div>
-
-        <section class="panel method-panel" aria-labelledby="method-title">
-          <div>
-            <h2 id="method-title">Site, aperçu et technologies</h2>
-            <p>L’Annuaire des Entreprises ne fournit pas le site internet. Chaque fiche permet donc de rechercher puis d’enregistrer l’URL vérifiée. Une prévisualisation sécurisée est disponible ; certains sites peuvent la bloquer avec leurs propres en-têtes de sécurité.</p>
+            <span class="source-badge">Source officielle</span>
           </div>
-          <ul>
-            <li>Le type de technologie n’est jamais inventé : WordPress, Wix, React ou autre restent « non analysés » sans backend.</li>
-            <li>L’analyse automatique fiable nécessitera un service serveur protégé contre le SSRF, avec récupération HTML, en-têtes HTTP, détection de technologies et capture d’écran.</li>
-            <li>Les coordonnées SIREN/SIRET, la taille, le chiffre d’affaires public et les indicateurs de budget restent visibles pour qualifier le prospect.</li>
-          </ul>
+
+          <form id="search-form" class="search-form">
+            <div class="field field-wide">
+              <label for="service">Service vendu</label>
+              <input id="service" name="service" type="text" maxlength="160" required value="Création et refonte de sites web">
+            </div>
+            <div class="field">
+              <label for="category">Segment</label>
+              <select id="category" name="category">
+                <option value="fastfood" selected>Fast-foods, kebabs et restauration rapide</option>
+                <option value="restaurants">Restaurants traditionnels</option>
+                <option value="food">Toute la restauration</option>
+                <option value="building">Entreprises du bâtiment</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="location">Ville ou zone</label>
+              <input id="location" name="location" type="text" maxlength="120" required value="Caen, Normandie" autocomplete="address-level2">
+            </div>
+            <div class="field field-small">
+              <label for="radius">Rayon</label>
+              <select id="radius" name="radius">
+                <option value="5">5 km</option>
+                <option value="10">10 km</option>
+                <option value="20" selected>20 km</option>
+                <option value="30">30 km</option>
+                <option value="50">50 km</option>
+              </select>
+            </div>
+            <div class="field field-small">
+              <label for="result-limit">Résultats</label>
+              <select id="result-limit" name="resultLimit">
+                <option value="10">10</option>
+                <option value="25">25</option>
+                <option value="50" selected>50</option>
+              </select>
+            </div>
+            <button class="button button-primary search-submit" id="launch" type="submit">Lancer la recherche</button>
+          </form>
+          <div class="progress" aria-hidden="true"><span id="progress"></span></div>
+          <p class="progress-text" id="progress-text">Prêt à rechercher.</p>
+        </section>
+
+        <section class="card results-card" id="prospects" aria-labelledby="prospects-title">
+          <div class="section-heading results-heading">
+            <div>
+              <p class="eyebrow">Qualification</p>
+              <h2 id="prospects-title">Prospects</h2>
+              <p id="result-count">0 entreprise</p>
+            </div>
+            <div class="filters" aria-label="Filtres des prospects">
+              <label class="visually-hidden" for="filter">Rechercher dans les résultats</label>
+              <input id="filter" type="search" maxlength="120" placeholder="Nom, ville, activité…">
+              <label class="visually-hidden" for="qualification-filter">Filtrer par qualification</label>
+              <select id="qualification-filter">
+                <option value="all">Toutes les qualifications</option>
+                <option value="high">Priorité élevée</option>
+                <option value="audited">Site vérifié</option>
+                <option value="pending">Site à qualifier</option>
+              </select>
+              <label class="visually-hidden" for="sort">Trier les résultats</label>
+              <select id="sort">
+                <option value="priority">Priorité validée</option>
+                <option value="business">Potentiel entreprise</option>
+                <option value="site">Besoin du site</option>
+                <option value="revenue">Chiffre d’affaires</option>
+                <option value="name">Nom alphabétique</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="table-wrap">
+            <table class="prospect-table">
+              <thead>
+                <tr>
+                  <th scope="col">Entreprise</th>
+                  <th scope="col">Potentiel</th>
+                  <th scope="col">Site internet</th>
+                  <th scope="col">Besoin web</th>
+                  <th scope="col">Priorité</th>
+                  <th scope="col"><span class="visually-hidden">Actions</span></th>
+                </tr>
+              </thead>
+              <tbody id="results"></tbody>
+            </table>
+          </div>
+          <div class="empty-state" id="empty-state">
+            <strong>Aucun prospect pour le moment</strong>
+            <p>Lance une recherche pour afficher les entreprises à qualifier.</p>
+          </div>
         </section>
       </main>
     </div>
   </div>
 
-  <dialog class="preview-dialog" id="site-preview-dialog" aria-labelledby="preview-title">
-    <div class="preview-header">
+  <dialog class="prospect-dialog" id="prospect-dialog" aria-labelledby="dialog-title">
+    <div class="dialog-header">
       <div>
-        <h2 id="preview-title">Aperçu du site</h2>
-        <p id="preview-url"></p>
+        <p class="eyebrow" id="dialog-segment">Prospect</p>
+        <h2 id="dialog-title">Détail du prospect</h2>
+        <p id="dialog-subtitle"></p>
       </div>
-      <button class="secondary-button" id="close-preview" type="button">Fermer</button>
+      <button class="icon-button" id="close-dialog" type="button" aria-label="Fermer la fenêtre">×</button>
     </div>
-    <div class="preview-warning">Aperçu isolé dans une sandbox. Si le site refuse l’intégration, utilise le bouton « Ouvrir le site ».</div>
-    <iframe id="site-preview-frame" title="Aperçu sécurisé du site du prospect" sandbox="allow-forms allow-scripts allow-popups" referrerpolicy="no-referrer" loading="lazy"></iframe>
+
+    <div class="dialog-body">
+      <section class="dialog-section" aria-labelledby="business-title">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Entreprise</p><h3 id="business-title">Potentiel commercial</h3></div>
+          <div class="score-pill" id="dialog-business-score">—</div>
+        </div>
+        <div class="metric-grid" id="dialog-metrics"></div>
+        <div class="evidence-list" id="dialog-business-evidence"></div>
+      </section>
+
+      <section class="dialog-section site-section" aria-labelledby="site-title">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Site internet</p><h3 id="site-title">Vérifier le besoin réel</h3></div>
+          <div class="score-pill neutral" id="dialog-site-score">À vérifier</div>
+        </div>
+
+        <div class="site-toolbar">
+          <div class="field site-url-field">
+            <label for="site-url">URL du site officiel</label>
+            <input id="site-url" type="url" maxlength="2048" placeholder="https://exemple.fr">
+          </div>
+          <button class="button button-secondary" id="find-site" type="button">Rechercher le site</button>
+          <button class="button button-secondary" id="save-site" type="button">Enregistrer</button>
+          <button class="button button-primary" id="audit-site" type="button">Analyser le site</button>
+        </div>
+
+        <label class="confirmation-control">
+          <input id="no-site-confirmed" type="checkbox">
+          <span><strong>Aucun site officiel trouvé</strong><small>À cocher uniquement après vérification.</small></span>
+        </label>
+
+        <div class="site-audit-layout">
+          <div class="website-preview" id="website-preview">
+            <div class="preview-placeholder">
+              <strong>Aperçu indisponible</strong>
+              <p>Enregistre une URL puis lance l’analyse pour obtenir une capture du site.</p>
+            </div>
+          </div>
+          <div>
+            <div class="audit-metrics" id="audit-metrics"></div>
+            <div class="technology-block">
+              <span>Technologies détectées</span>
+              <div class="technology-list" id="technology-list"><small>Non analysées</small></div>
+            </div>
+          </div>
+        </div>
+
+        <fieldset class="manual-review">
+          <legend>Contrôle visuel rapide</legend>
+          <p>Ces observations complètent les mesures automatiques et évitent de contacter une entreprise dont le site est déjà satisfaisant.</p>
+          <div class="check-grid">
+            <label><input type="checkbox" value="datedDesign"> Design visuellement daté</label>
+            <label><input type="checkbox" value="poorMobile"> Affichage mobile peu convaincant</label>
+            <label><input type="checkbox" value="weakConversion"> Réservation, commande ou devis peu visible</label>
+            <label><input type="checkbox" value="weakTrust"> Peu de preuves, avis ou réalisations</label>
+            <label><input type="checkbox" value="confusingNavigation"> Navigation confuse</label>
+            <label><input type="checkbox" value="siteGood"> Le site paraît déjà professionnel</label>
+          </div>
+        </fieldset>
+      </section>
+
+      <section class="dialog-section" aria-labelledby="contact-title">
+        <div class="section-heading compact">
+          <div><p class="eyebrow">Suivi</p><h3 id="contact-title">Préparer le contact</h3></div>
+          <select id="prospect-status" aria-label="Statut commercial du prospect">
+            <option value="new">Nouveau</option>
+            <option value="contacted">Contacté</option>
+            <option value="replied">Répondu</option>
+            <option value="won">Gagné</option>
+            <option value="ignored">Ignoré</option>
+          </select>
+        </div>
+        <label for="contact-message">Message proposé</label>
+        <textarea id="contact-message" rows="9" maxlength="4000"></textarea>
+        <div class="dialog-actions">
+          <button class="button button-secondary" id="copy-message" type="button">Copier le message</button>
+          <a class="button button-secondary" id="open-site" href="#" target="_blank" rel="noopener noreferrer" hidden>Ouvrir le site</a>
+          <button class="button button-primary" id="save-prospect" type="button">Enregistrer les modifications</button>
+        </div>
+      </section>
+    </div>
   </dialog>
 </body>
 </html>
