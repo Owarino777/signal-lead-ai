@@ -4,73 +4,64 @@ window.SIGNAL_LEAD_BACKEND = Object.freeze({
   baseUrl: "https://signal-lead-api.malikcheikhpro14.workers.dev"
 });
 
-function findLoadedAsset(selector, path) {
-  return [...document.querySelectorAll(selector)].find((element) => {
-    const value = element.getAttribute(selector === "script[src]" ? "src" : "href") || "";
-    return value === path || value.endsWith(`/${path}`);
-  }) || null;
-}
+(function bootstrapSignalLeadModules() {
+  if (window.__SIGNAL_LEAD_MODULE_BOOTSTRAP__) return;
+  window.__SIGNAL_LEAD_MODULE_BOOTSTRAP__ = true;
 
-function appendStylesheetOnce(href) {
-  if (findLoadedAsset('link[rel="stylesheet"][href]', href)) return;
-  const stylesheet = document.createElement("link");
-  stylesheet.rel = "stylesheet";
-  stylesheet.href = href;
-  document.head.append(stylesheet);
-}
-
-function appendScriptOnce(src, onLoad) {
-  const existing = findLoadedAsset("script[src]", src);
-
-  if (existing) {
-    if (onLoad) {
-      if (existing.dataset.loaded === "true" || existing.readyState === "complete") onLoad();
-      else existing.addEventListener("load", onLoad, { once: true });
-    }
-    return existing;
+  function findAsset(selector, path) {
+    return [...document.querySelectorAll(selector)].find((element) => {
+      const attribute = selector.startsWith("script") ? "src" : "href";
+      const value = element.getAttribute(attribute) || "";
+      return value === path || value.endsWith(`/${path}`);
+    }) || null;
   }
 
-  const script = document.createElement("script");
-  script.src = src;
-  script.addEventListener("load", () => {
-    script.dataset.loaded = "true";
-  }, { once: true });
-  if (onLoad) script.addEventListener("load", onLoad, { once: true });
-  document.head.append(script);
-  return script;
-}
+  function loadStyle(href) {
+    if (findAsset('link[rel="stylesheet"]', href)) return;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = href;
+    document.head.append(link);
+  }
 
-function loadSignalLeadModules() {
-  if (window.__SIGNAL_LEAD_MODULES_LOADING__) return;
-  window.__SIGNAL_LEAD_MODULES_LOADING__ = true;
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const existing = findAsset("script[src]", src);
+      if (existing) {
+        if (existing.dataset.loaded === "true") {
+          resolve();
+          return;
+        }
+        existing.addEventListener("load", resolve, { once: true });
+        existing.addEventListener("error", reject, { once: true });
+        return;
+      }
 
-  appendStylesheetOnce("commercial-intelligence.css");
-  appendStylesheetOnce("product-ui.css");
-
-  const loadCommercialUi = () => {
-    appendScriptOnce("commercial-intelligence.js", () => {
-      appendScriptOnce("runtime-fixes.js", () => {
-        appendScriptOnce("product-ui.js");
-      });
+      const script = document.createElement("script");
+      script.src = src;
+      script.addEventListener("load", () => {
+        script.dataset.loaded = "true";
+        resolve();
+      }, { once: true });
+      script.addEventListener("error", reject, { once: true });
+      document.head.append(script);
     });
-  };
-
-  if (typeof WORKER_CLIENT !== "undefined") {
-    loadCommercialUi();
-    return;
   }
 
-  const legacyWorkerClient = findLoadedAsset("script[src]", "worker-client.js");
-  if (legacyWorkerClient) {
-    legacyWorkerClient.addEventListener("load", loadCommercialUi, { once: true });
-    return;
+  async function start() {
+    loadStyle("product-ui.css");
+
+    try {
+      await loadScript("commercial-core.js");
+      await loadScript("product-ui.js");
+    } catch (error) {
+      console.error("SignalLead UI bootstrap failed", error);
+    }
   }
 
-  appendScriptOnce("worker-client-v2.js", loadCommercialUi);
-}
-
-if (document.readyState === "loading") {
-  window.addEventListener("DOMContentLoaded", loadSignalLeadModules, { once: true });
-} else {
-  loadSignalLeadModules();
-}
+  if (document.readyState === "loading") {
+    window.addEventListener("DOMContentLoaded", start, { once: true });
+  } else {
+    start();
+  }
+})();
