@@ -1,0 +1,717 @@
+:root {
+  --brand-ink: #10283d;
+  --brand-ink-strong: #091c2c;
+  --brand-coral: #ff6948;
+  --brand-coral-dark: #db4d2d;
+  --brand-mint: #35b98b;
+  --brand-mint-soft: #e9f8f2;
+  --brand-sky: #eaf3fb;
+  --product-background: #f4f7f9;
+  --product-surface: #ffffff;
+  --product-border: #dce4ea;
+  --product-shadow: 0 18px 50px rgba(16, 40, 61, 0.09);
+  --product-shadow-hover: 0 22px 55px rgba(16, 40, 61, 0.14);
+}
+
+body {
+  background:
+    radial-gradient(circle at 82% 4%, rgba(255, 105, 72, 0.08), transparent 24rem),
+    var(--product-background);
+}
+
+.sidebar {
+  background:
+    linear-gradient(180deg, #102d43 0%, #0b2234 54%, #081b2b 100%);
+  box-shadow: 12px 0 36px rgba(7, 27, 43, 0.08);
+}
+
+.brand {
+  font-size: 1.08rem;
+  letter-spacing: -0.035em;
+}
+
+.brand-mark {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #ff795d, #f35436);
+  box-shadow: 0 8px 22px rgba(255, 105, 72, 0.32);
+}
+
+.side-nav {
+  gap: 0.42rem;
+}
+
+.side-nav a,
+.side-nav button {
+  min-height: 44px;
+  border-radius: 0.7rem;
+  transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.side-nav a:hover,
+.side-nav a:focus-visible,
+.side-nav button:hover,
+.side-nav button:focus-visible {
+  transform: translateX(3px);
+}
+
+.side-nav .active {
+  background: linear-gradient(90deg, rgba(75, 142, 191, 0.34), rgba(75, 142, 191, 0.18));
+  box-shadow: inset 3px 0 0 #6bb6e7;
+}
+
+.source-note {
+  border: 0;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+}
+
+.topbar {
+  min-height: 72px;
+  border-bottom-color: rgba(16, 40, 61, 0.08);
+  box-shadow: 0 1px 0 rgba(16, 40, 61, 0.04);
+}
+
+.topbar .button-secondary {
+  border-color: #cbd8e1;
+  box-shadow: 0 4px 14px rgba(16, 40, 61, 0.06);
+}
+
+.intro {
+  padding-top: 2.1rem;
+  padding-bottom: 1.6rem;
+}
+
+.intro h2 {
+  max-width: 900px;
+  font-size: clamp(2rem, 4vw, 3.35rem);
+  letter-spacing: -0.055em;
+}
+
+.summary-grid {
+  gap: 0;
+  overflow: hidden;
+  border: 1px solid var(--product-border);
+  border-radius: 1rem;
+  background: var(--product-surface);
+  box-shadow: 0 9px 28px rgba(16, 40, 61, 0.06);
+}
+
+.summary-card {
+  min-height: 118px;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.summary-card + .summary-card {
+  border-left: 1px solid var(--product-border);
+}
+
+.summary-card strong {
+  font-size: 2rem;
+}
+
+.card {
+  border-color: var(--product-border);
+  border-radius: 1rem;
+  box-shadow: 0 10px 34px rgba(16, 40, 61, 0.06);
+}
+
+.search-card {
+  padding: 1.45rem;
+}
+
+.search-card .source-badge {
+  background: var(--brand-mint-soft);
+  color: #167755;
+}
+
+.button {
+  border-radius: 0.65rem;
+  transition: transform 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+
+.button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.button-primary {
+  border-color: var(--brand-coral-dark);
+  background: linear-gradient(180deg, #ff7455, var(--brand-coral));
+  box-shadow: 0 8px 20px rgba(255, 105, 72, 0.22);
+}
+
+.button-primary:hover {
+  background: linear-gradient(180deg, #f96648, #df4e31);
+  box-shadow: 0 11px 26px rgba(255, 105, 72, 0.3);
+}
+
+.button-secondary {
+  border-color: #cdd8e1;
+  background: #ffffff;
+}
+
+.results-card {
+  border-radius: 1rem;
+}
+
+.results-heading {
+  padding: 1.3rem 1.4rem;
+  background: linear-gradient(180deg, #ffffff, #fbfcfd);
+}
+
+.prospect-table th {
+  height: 46px;
+  padding-inline: 1.25rem;
+  border-bottom-color: #dce5eb;
+  background: #f7f9fb;
+  color: #587084;
+}
+
+.prospect-table td {
+  padding: 1.05rem 1.25rem;
+}
+
+.prospect-table tbody tr {
+  cursor: pointer;
+  outline: none;
+  transition: background 150ms ease, box-shadow 150ms ease, transform 150ms ease;
+}
+
+.prospect-table tbody tr:hover td,
+.prospect-table tbody tr:focus-visible td {
+  background: #f8fbfd;
+}
+
+.prospect-table tbody tr:hover,
+.prospect-table tbody tr:focus-visible {
+  box-shadow: inset 0 0 0 1px rgba(49, 81, 110, 0.11);
+}
+
+.compact-row[data-verdict="contact_now"] td:first-child,
+.compact-row[data-verdict="secondary"] td:first-child {
+  position: relative;
+}
+
+.compact-row[data-verdict="contact_now"] td:first-child::before,
+.compact-row[data-verdict="secondary"] td:first-child::before {
+  position: absolute;
+  inset: 18% auto 18% 0;
+  width: 4px;
+  border-radius: 999px;
+  content: "";
+}
+
+.compact-row[data-verdict="contact_now"] td:first-child::before {
+  background: var(--brand-coral);
+}
+
+.compact-row[data-verdict="secondary"] td:first-child::before {
+  background: #d99b24;
+}
+
+.compact-score {
+  font-size: 1.15rem;
+}
+
+.compact-signal {
+  font-size: 0.92rem;
+}
+
+.compact-offer {
+  margin-top: 0.35rem;
+  color: #47647d;
+  font-size: 0.8rem;
+}
+
+.compact-metadata {
+  margin-top: 0.45rem;
+}
+
+.row-actions .button {
+  min-width: 98px;
+  background: #f8fafb;
+}
+
+.prospect-dialog {
+  width: min(1040px, calc(100vw - 2rem));
+  border-radius: 1.15rem;
+  box-shadow: 0 36px 110px rgba(4, 19, 31, 0.38);
+}
+
+.prospect-dialog::backdrop {
+  background: rgba(5, 20, 32, 0.7);
+  backdrop-filter: blur(7px);
+}
+
+.dialog-header {
+  padding: 1.3rem 1.55rem;
+  border-bottom-color: rgba(16, 40, 61, 0.09);
+}
+
+.dialog-header h2 {
+  font-size: 1.65rem;
+  letter-spacing: -0.035em;
+}
+
+.dialog-body {
+  gap: 0;
+  padding: 0;
+}
+
+.dialog-section {
+  margin: 0;
+  padding: 1.45rem 1.6rem;
+  border: 0;
+  border-radius: 0;
+  background: #ffffff;
+}
+
+.dialog-section + .dialog-section {
+  border-top: 1px solid #e1e8ed;
+}
+
+.decision-section {
+  padding: 0;
+  background: transparent;
+}
+
+.decision-original-heading,
+.decision-section > .commercial-overview,
+.decision-section > .commercial-recommendation,
+.decision-section > #copy-commercial-brief {
+  display: none !important;
+}
+
+.decision-summary {
+  padding: 1.75rem 1.7rem 1.55rem;
+  border-radius: 0;
+  background:
+    radial-gradient(circle at 92% 0%, rgba(255, 105, 72, 0.12), transparent 17rem),
+    linear-gradient(145deg, #102f47 0%, #0c2336 68%, #081c2c 100%);
+  color: #ffffff;
+}
+
+.decision-heading {
+  max-width: 760px;
+}
+
+.decision-heading .eyebrow {
+  color: #8bc5e6;
+}
+
+.decision-status-line {
+  margin: 0.7rem 0 0.8rem;
+}
+
+.decision-status-line > span:last-child {
+  color: rgba(255, 255, 255, 0.68);
+}
+
+.decision-summary h3 {
+  margin: 0;
+  color: #ffffff;
+  font-size: clamp(1.55rem, 3vw, 2.35rem);
+  line-height: 1.12;
+  letter-spacing: -0.045em;
+}
+
+.decision-summary #decision-description {
+  max-width: 760px;
+  margin: 0.75rem 0 0;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.97rem;
+  line-height: 1.65;
+}
+
+.decision-steps {
+  margin-top: 1.4rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.decision-steps span {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.62);
+}
+
+.decision-steps span::after {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.decision-steps span.is-active {
+  border-color: rgba(255, 185, 166, 0.62);
+  background: rgba(255, 105, 72, 0.16);
+  color: #ffffff;
+}
+
+.decision-steps span.is-complete {
+  border-color: rgba(71, 208, 160, 0.48);
+  background: rgba(53, 185, 139, 0.13);
+  color: #d9fff1;
+}
+
+.decision-steps span b {
+  background: rgba(255, 255, 255, 0.14);
+  color: inherit;
+}
+
+.decision-metrics {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 1.35rem;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 0.9rem;
+}
+
+.decision-metric {
+  padding: 1rem 1.1rem;
+  border: 0;
+  border-radius: 0;
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.decision-metric + .decision-metric {
+  border-left: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.decision-metric-label,
+.decision-metric-caption {
+  color: rgba(255, 255, 255, 0.58);
+}
+
+.decision-metric-value {
+  color: #ffffff;
+  font-size: 1.35rem;
+}
+
+.decision-offer-summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+  margin-top: 1.1rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 0.9rem;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.decision-offer-icon {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  border-radius: 13px;
+  background: rgba(255, 105, 72, 0.18);
+  color: #ffb19f;
+}
+
+.decision-offer-content {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: center;
+}
+
+.decision-offer-label {
+  display: block;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.075em;
+}
+
+.decision-offer-title,
+.decision-offer-price-value {
+  display: block;
+  margin-top: 0.25rem;
+  color: #ffffff;
+  font-size: 0.96rem;
+}
+
+.decision-offer-price {
+  padding-left: 1rem;
+  border-left: 1px solid rgba(255, 255, 255, 0.13);
+}
+
+.decision-copy-button {
+  min-height: 38px;
+  border: 1px solid rgba(255, 255, 255, 0.17);
+  background: rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+  box-shadow: none;
+}
+
+.decision-copy-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.decision-next-step {
+  margin-top: 1.1rem;
+  padding: 1rem 1.05rem;
+  border: 0;
+  border-radius: 0.9rem;
+  background: #ffffff;
+  color: var(--brand-ink);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.13);
+}
+
+.decision-next-step > div > span,
+.decision-next-step small {
+  color: #687a89;
+}
+
+.decision-detail-disclosure {
+  margin: 0;
+  padding: 0 1.6rem;
+  border: 0;
+  background: #ffffff;
+}
+
+.decision-detail-disclosure > summary {
+  padding: 1rem 0;
+  color: #355873;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.decision-detail-disclosure[open] > summary {
+  margin-bottom: 0;
+  border-bottom: 1px solid #e1e8ed;
+}
+
+.decision-detail-content {
+  padding-bottom: 1.35rem;
+}
+
+.decision-detail-content .commercial-overview,
+.decision-detail-content .commercial-recommendation {
+  display: none;
+}
+
+.commercial-detail-disclosure {
+  margin-top: 0;
+  border-top: 0;
+  padding-top: 1rem;
+}
+
+.commercial-columns > div,
+.commercial-confidence-grid .metric {
+  border-color: #dce5eb;
+  box-shadow: none;
+}
+
+.site-section,
+.workflow-secondary-section,
+.business-secondary-section {
+  padding: 1.15rem 1.6rem;
+}
+
+.site-section > .section-heading,
+.site-section > .site-guidance,
+.workflow-secondary-section > .section-heading,
+.business-secondary-section > .section-heading {
+  display: none;
+}
+
+.site-workflow-disclosure,
+.contact-workflow-disclosure,
+.business-detail-disclosure {
+  margin: 0;
+  border: 0;
+  padding: 0;
+}
+
+.site-workflow-disclosure > summary,
+.contact-workflow-disclosure > summary,
+.business-detail-disclosure > summary {
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0;
+  color: var(--brand-ink);
+  font-size: 0.94rem;
+  font-weight: 850;
+  list-style: none;
+}
+
+.site-workflow-disclosure > summary::-webkit-details-marker,
+.contact-workflow-disclosure > summary::-webkit-details-marker,
+.business-detail-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+
+.site-workflow-disclosure > summary::after,
+.contact-workflow-disclosure > summary::after,
+.business-detail-disclosure > summary::after {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border-radius: 9px;
+  background: #eef3f6;
+  color: #33536d;
+  content: "+";
+  font-size: 1.1rem;
+}
+
+.site-workflow-disclosure[open] > summary::after,
+.contact-workflow-disclosure[open] > summary::after,
+.business-detail-disclosure[open] > summary::after {
+  content: "−";
+}
+
+.workflow-summary-title,
+.workflow-summary-caption {
+  display: block;
+}
+
+.workflow-summary-caption {
+  margin-left: auto;
+  color: #718493;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.site-workflow-disclosure[open] > summary,
+.contact-workflow-disclosure[open] > summary,
+.business-detail-disclosure[open] > summary {
+  margin-bottom: 1rem;
+  border-bottom: 1px solid #e3eaef;
+  padding-bottom: 0.9rem;
+}
+
+.site-toolbar {
+  margin-top: 0;
+}
+
+.site-audit-layout {
+  margin-top: 1rem;
+}
+
+.contact-workflow-disclosure textarea {
+  background: #f8fafb;
+}
+
+.business-secondary-section {
+  background: #fbfcfd;
+}
+
+.icon-button {
+  transition: background 150ms ease, transform 150ms ease;
+}
+
+.icon-button:hover {
+  transform: rotate(3deg);
+  background: #f2f6f8;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button,
+  .side-nav a,
+  .side-nav button,
+  .prospect-table tbody tr,
+  .icon-button {
+    transition: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .summary-card + .summary-card {
+    border-left: 0;
+  }
+
+  .summary-card:nth-child(even) {
+    border-left: 1px solid var(--product-border);
+  }
+
+  .summary-card:nth-child(n + 3) {
+    border-top: 1px solid var(--product-border);
+  }
+
+  .decision-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-metric + .decision-metric {
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    border-left: 0;
+  }
+
+  .decision-offer-summary {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .decision-copy-button {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  body {
+    background: var(--product-background);
+  }
+
+  .intro {
+    padding-top: 1.25rem;
+  }
+
+  .summary-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .summary-card {
+    min-height: 104px;
+  }
+
+  .prospect-dialog {
+    width: 100vw;
+    max-height: 100dvh;
+    border-radius: 0;
+  }
+
+  .decision-summary {
+    padding: 1.35rem 1.1rem;
+  }
+
+  .decision-offer-content {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .decision-offer-price {
+    padding-top: 0.7rem;
+    padding-left: 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.13);
+    border-left: 0;
+  }
+
+  .decision-next-step {
+    align-items: stretch;
+  }
+
+  .decision-detail-disclosure,
+  .site-section,
+  .workflow-secondary-section,
+  .business-secondary-section {
+    padding-inline: 1.1rem;
+  }
+
+  .workflow-summary-caption {
+    display: none;
+  }
+}
