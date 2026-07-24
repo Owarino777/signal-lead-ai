@@ -1,12 +1,13 @@
 {
   "name": "signal-lead-api",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "check": "wrangler deploy --dry-run"
+    "test": "node --test",
+    "deploy": "npm test && wrangler deploy",
+    "check": "npm test && wrangler deploy --dry-run"
   },
   "devDependencies": {
     "wrangler": "^4.30.0"
