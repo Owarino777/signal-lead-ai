@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "signal-lead-api",
-  "main": "src/product-worker.js",
+  "main": "src/saas-worker.js",
   "compatibility_date": "2026-07-23",
   "workers_dev": true,
   "observability": {
@@ -9,7 +9,8 @@
     "head_sampling_rate": 1
   },
   "vars": {
-    "ALLOWED_ORIGINS": "https://owarino777.github.io"
+    "ALLOWED_ORIGINS": "https://owarino777.github.io",
+    "SAAS_MODE": "false"
   },
   "ratelimits": [
     {
