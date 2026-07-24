@@ -50,6 +50,7 @@ window.SIGNAL_LEAD_BACKEND = Object.freeze({
 
   async function start() {
     loadStyle("product-ui.css");
+    loadStyle("simple-ui.css");
 
     try {
       await loadScript("commercial-core.js");
