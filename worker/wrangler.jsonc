@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "signal-lead-api",
-  "main": "src/domain-enrichment.js",
+  "main": "src/product-worker.js",
   "compatibility_date": "2026-07-23",
   "workers_dev": true,
   "observability": {
