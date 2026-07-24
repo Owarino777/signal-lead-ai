@@ -21,10 +21,13 @@ function appendScript(src, onLoad) {
 window.addEventListener("DOMContentLoaded", () => {
   appendStylesheet("commercial-intelligence.css");
   appendStylesheet("compact-ui.css");
+  appendStylesheet("ui-polish.css");
 
   appendScript("worker-client-v2.js", () => {
     appendScript("commercial-intelligence.js", () => {
-      appendScript("compact-ui.js");
+      appendScript("compact-ui.js", () => {
+        appendScript("ui-polish.js");
+      });
     });
   });
 }, { once: true });
