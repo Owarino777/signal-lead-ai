@@ -5,8 +5,17 @@ window.SIGNAL_LEAD_BACKEND = Object.freeze({
 });
 
 window.addEventListener("DOMContentLoaded", () => {
-  const script = document.createElement("script");
-  script.src = "worker-client-v2.js";
-  script.defer = true;
-  document.head.append(script);
+  const stylesheet = document.createElement("link");
+  stylesheet.rel = "stylesheet";
+  stylesheet.href = "commercial-intelligence.css";
+  document.head.append(stylesheet);
+
+  const enrichmentScript = document.createElement("script");
+  enrichmentScript.src = "worker-client-v2.js";
+  enrichmentScript.addEventListener("load", () => {
+    const intelligenceScript = document.createElement("script");
+    intelligenceScript.src = "commercial-intelligence.js";
+    document.head.append(intelligenceScript);
+  }, { once: true });
+  document.head.append(enrichmentScript);
 }, { once: true });
