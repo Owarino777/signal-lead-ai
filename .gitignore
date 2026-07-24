@@ -1,0 +1,13 @@
+node_modules/
+worker/node_modules/
+.dev.vars
+worker/.dev.vars
+.env
+.env.*
+!.dev.vars.example
+!worker/.dev.vars.example
+.wrangler/
+worker/.wrangler/
+.DS_Store
+Thumbs.db
+npm-debug.log*
