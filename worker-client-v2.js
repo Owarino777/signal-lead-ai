@@ -1,9 +1,14 @@
 "use strict";
 
-(function activateSingleRequestEnrichment() {
+(function activateProgressiveEnrichment() {
   if (typeof enrichBatchWithWorker !== "function" || typeof verifyWorkerHealth !== "function") {
     return;
   }
+
+  const ENRICHMENT_BATCH_SIZE = 8;
+  const ENRICHMENT_CONCURRENCY = 2;
+  const MAX_AUTOMATIC_AUDITS = 20;
+  const AUDIT_CONCURRENCY = 4;
 
   applyWorkerEnrichment = function applyStrictWorkerEnrichment(item, result) {
     if (!result?.found) {
@@ -11,17 +16,27 @@
         item.website = null;
         item.websiteSource = null;
         item.websiteConfidence = null;
+        item.websiteEvidence = [];
+        item.websitePageTitle = null;
         item.audit = null;
         item.auditStatus = null;
         item.auditError = null;
       }
+
       item.websiteDiscoveryStatus = result?.deferred ? "deferred" : "not_found";
       updatePriority(item);
       return;
     }
 
+    const website = normalizeUrl(result.website);
+    if (!website) {
+      item.websiteDiscoveryStatus = "not_found";
+      updatePriority(item);
+      return;
+    }
+
     item.websiteDiscoveryStatus = "found";
-    item.website = normalizeUrl(result.website);
+    item.website = website;
     item.websiteSource = result.source || "Validation automatique du domaine";
     item.websiteConfidence = Number.isFinite(result.confidence) ? result.confidence : null;
     item.websiteEvidence = Array.isArray(result.evidence)
@@ -36,7 +51,7 @@
     updatePriority(item);
   };
 
-  enrichBatchWithWorker = async function enrichAllWithStrongIdentity(batch, geo, formData) {
+  enrichBatchWithWorker = async function enrichBatchWithStrongIdentity(batch, geo, formData) {
     const payload = await callWorker("/api/enrich", {
       geo: {
         latitude: geo.latitude,
@@ -70,7 +85,15 @@
     }
   };
 
-  enrichProspects = async function enrichProspectsWithSingleWorkerRequest(items, geo, formData) {
+  function createBatches(items, size) {
+    const batches = [];
+    for (let index = 0; index < items.length; index += size) {
+      batches.push(items.slice(index, index + size));
+    }
+    return batches;
+  }
+
+  enrichProspects = async function enrichProspectsProgressively(items, geo, formData) {
     if (!getBackendBaseUrl()) {
       return FALLBACK_ENRICH_PROSPECTS(items, geo, formData);
     }
@@ -97,37 +120,55 @@
       return;
     }
 
-    try {
-      setProgress(58, `Identification sécurisée des ${items.length} entreprises…`);
-      await enrichBatchWithWorker(items, geo, formData);
-    } catch (error) {
-      const message = describeNetworkError(error);
-      for (const item of items) {
-        item.websiteDiscoveryStatus = "enrichment_failed";
-        updatePriority(item);
+    const orderedItems = [...items].sort(
+      (left, right) => right.businessScore - left.businessScore
+    );
+    const batches = createBatches(orderedItems, ENRICHMENT_BATCH_SIZE);
+    let processedCount = 0;
+    let failedBatchCount = 0;
+
+    await mapWithConcurrency(
+      batches,
+      ENRICHMENT_CONCURRENCY,
+      async (batch) => {
+        try {
+          await enrichBatchWithWorker(batch, geo, formData);
+        } catch (error) {
+          failedBatchCount += 1;
+          for (const item of batch) {
+            item.websiteDiscoveryStatus = "enrichment_failed";
+            updatePriority(item);
+          }
+          showNotice(describeNetworkError(error), "warning");
+        }
+
+        processedCount += batch.length;
+        setProgress(
+          48 + Math.round((processedCount / Math.max(1, items.length)) * 27),
+          `Identification des sites (${processedCount}/${items.length})…`
+        );
+        persistItems();
+        render();
       }
-      persistItems();
-      render();
-      showNotice(message, "warning");
+    );
+
+    if (failedBatchCount === batches.length && batches.length > 0) {
       setProgress(100, "Recherche terminée : identification des sites indisponible.");
       return;
     }
 
-    persistItems();
-    render();
-
     const auditable = items
-      .filter((item) => item.website)
+      .filter((item) => item.website && item.websiteDiscoveryStatus === "found")
       .sort((left, right) => right.businessScore - left.businessScore)
-      .slice(0, WORKER_CLIENT.auditLimit);
+      .slice(0, MAX_AUTOMATIC_AUDITS);
 
-    let completed = 0;
-    await mapWithConcurrency(auditable, WORKER_CLIENT.concurrency, async (item) => {
+    let completedAudits = 0;
+    await mapWithConcurrency(auditable, AUDIT_CONCURRENCY, async (item) => {
       await auditItemWithWorker(item);
-      completed += 1;
+      completedAudits += 1;
       setProgress(
-        75 + Math.round((completed / Math.max(1, auditable.length)) * 23),
-        `Audit sécurisé des sites (${completed}/${auditable.length})…`
+        76 + Math.round((completedAudits / Math.max(1, auditable.length)) * 22),
+        `Audit des sites validés (${completedAudits}/${auditable.length})…`
       );
       persistItems();
       render();
@@ -136,6 +177,15 @@
     for (const item of items) updatePriority(item);
     persistItems();
     render();
-    setProgress(100, `${items.length} entreprises traitées, ${auditable.length} site${auditable.length > 1 ? "s" : ""} validé${auditable.length > 1 ? "s" : ""}.`);
+
+    const foundCount = items.filter(
+      (item) => item.website && item.websiteDiscoveryStatus === "found"
+    ).length;
+    const analyzedCount = items.filter((item) => item.auditStatus === "completed").length;
+
+    setProgress(
+      100,
+      `${items.length} entreprises vérifiées, ${foundCount} site${foundCount > 1 ? "s" : ""} validé${foundCount > 1 ? "s" : ""}, ${analyzedCount} analysé${analyzedCount > 1 ? "s" : ""}.`
+    );
   };
 })();
