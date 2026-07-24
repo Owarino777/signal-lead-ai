@@ -125,7 +125,8 @@ export function scoreWebsiteIdentity({ business, url, title, description, text }
 
   const matchedTokens = nameTokens.filter((token) => content.includes(token));
   const tokenRatio = nameTokens.length ? matchedTokens.length / nameTokens.length : 0;
-  const exactName = expected.length >= 4 && (titleText.includes(expected) || content.includes(expected));
+  const titleNameMatch = expected.length >= 4 && titleText.includes(expected);
+  const bodyNameMatch = expected.length >= 4 && content.includes(expected);
   const domainMatches = nameTokens.filter((token) => domainText.includes(token)).length;
   const domainRatio = nameTokens.length ? domainMatches / nameTokens.length : 0;
   const cityMatch = city.length >= 3 && content.includes(city);
@@ -133,23 +134,31 @@ export function scoreWebsiteIdentity({ business, url, title, description, text }
   const expectedPhone = normalizePhone(business.phone);
   const pagePhone = normalizePhone(text);
   const phoneMatch = expectedPhone.length >= 10 && pagePhone.includes(expectedPhone.slice(-9));
+  const shortIdentity = nameTokens.length <= 1;
 
   let score = 0;
-  if (exactName) score += 0.38;
-  score += tokenRatio * 0.26;
-  score += domainRatio * 0.18;
-  if (cityMatch) score += 0.09;
+  if (titleNameMatch) score += 0.38;
+  else if (bodyNameMatch) score += 0.14;
+  score += tokenRatio * 0.24;
+  score += domainRatio * 0.16;
+  if (cityMatch) score += 0.1;
   if (addressMatch) score += 0.06;
-  if (phoneMatch) score += 0.03;
+  if (phoneMatch) score += 0.06;
 
   score = Math.min(1, score);
-  const hasNameProof = exactName || tokenRatio >= 0.67;
-  const hasLocationOrDomainProof = cityMatch || addressMatch || domainRatio >= 0.5 || phoneMatch;
-  const accepted = score >= 0.62 && hasNameProof && hasLocationOrDomainProof;
+
+  const independentLocationProof = cityMatch || addressMatch || phoneMatch;
+  const strongNameProof = titleNameMatch
+    || (!shortIdentity && (bodyNameMatch || tokenRatio >= 0.67));
+  const independentDomainProof = !shortIdentity && domainRatio >= 0.5;
+  const supportingProof = independentLocationProof || independentDomainProof;
+  const accepted = score >= 0.62 && strongNameProof && supportingProof;
 
   const evidence = [];
-  if (exactName) evidence.push("Nom de l’entreprise présent sur le site");
-  else if (tokenRatio >= 0.67) evidence.push("Nom commercial fortement concordant");
+  if (titleNameMatch) evidence.push("Nom de l’entreprise présent dans le titre");
+  else if (!shortIdentity && (bodyNameMatch || tokenRatio >= 0.67)) {
+    evidence.push("Nom commercial fortement concordant");
+  }
   if (domainRatio >= 0.5) evidence.push("Nom de domaine cohérent");
   if (cityMatch) evidence.push("Ville retrouvée sur le site");
   if (addressMatch) evidence.push("Adresse concordante");
@@ -160,7 +169,9 @@ export function scoreWebsiteIdentity({ business, url, title, description, text }
     score: Number(score.toFixed(2)),
     evidence,
     diagnostics: {
-      exactName,
+      titleNameMatch,
+      bodyNameMatch,
+      shortIdentity,
       tokenRatio: Number(tokenRatio.toFixed(2)),
       domainRatio: Number(domainRatio.toFixed(2)),
       cityMatch,
