@@ -1,0 +1,62 @@
+name: Quality checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in app.js fast-enrichment.js backend-config.js worker-client.js commercial-core.js product-ui.js; do
+            node --check "$file"
+          done
+
+      - name: Validate production assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(grep -c 'src="worker-client.js"' index.html)" -eq 1
+          test "$(grep -c 'src="backend-config.js"' index.html)" -eq 1
+          grep -q 'commercial-core.js' backend-config.js
+          grep -q 'product-ui.js' backend-config.js
+
+  worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: worker
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Install Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: worker/package.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run tests and build check
+        run: npm run check
