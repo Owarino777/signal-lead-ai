@@ -1,16 +1,20 @@
 "use strict";
 
-(function activateSignalLeadProductUi() {
+(function activateSignalLeadSimpleUi() {
+  if (window.__SIGNAL_LEAD_SIMPLE_UI__) return;
+  window.__SIGNAL_LEAD_SIMPLE_UI__ = true;
+
   if (
     typeof render !== "function"
     || typeof syncDialog !== "function"
     || typeof getVisibleItems !== "function"
   ) {
+    window.__SIGNAL_LEAD_SIMPLE_UI__ = false;
     return;
   }
 
-  const ORIGINAL_RENDER = render;
-  const ORIGINAL_SYNC_DIALOG = syncDialog;
+  const baseRender = render;
+  const baseSyncDialog = syncDialog;
 
   function element(tagName, className, text) {
     const node = document.createElement(tagName);
@@ -28,30 +32,108 @@
     }
   }
 
-  function hasMeaningfulIssue(item, intelligence) {
-    return Boolean(
-      item.audit
-      && intelligence.signals?.some((signal) => !/globalement satisfaisant/i.test(signal))
-    );
+  function simplifyPageChrome() {
+    document.querySelector(".intro")?.remove();
+
+    const topbarEyebrow = document.querySelector(".topbar .eyebrow");
+    if (topbarEyebrow) topbarEyebrow.remove();
+
+    const topbarTitle = document.querySelector(".topbar h1");
+    if (topbarTitle) topbarTitle.textContent = "SignalLead";
+
+    const navigationItems = document.querySelectorAll(".side-nav a, .side-nav button");
+    if (navigationItems[0]) {
+      navigationItems[0].textContent = "Recherche";
+      navigationItems[0].setAttribute("href", "#search");
+    }
+    if (navigationItems[1]) navigationItems[1].textContent = "Nouvelle recherche";
+    if (navigationItems[2]) navigationItems[2].textContent = "Prospects";
+    if (navigationItems[3]) navigationItems[3].textContent = "Exporter";
+
+    const searchHeading = document.querySelector("#search .section-heading");
+    searchHeading?.querySelector(".eyebrow")?.remove();
+    searchHeading?.querySelector("p:not(.eyebrow)")?.remove();
+    searchHeading?.querySelector(".source-badge")?.remove();
+
+    const searchTitle = document.querySelector("#search-title");
+    if (searchTitle) searchTitle.textContent = "Trouver des prospects";
+
+    const labels = {
+      service: "Votre offre",
+      category: "Cible",
+      location: "Zone",
+      radius: "Rayon",
+      "result-limit": "Nombre"
+    };
+
+    for (const [inputId, label] of Object.entries(labels)) {
+      const node = document.querySelector(`label[for="${inputId}"]`);
+      if (node) node.textContent = label;
+    }
+
+    if (dom.launch) dom.launch.textContent = state.isLoading ? "Recherche…" : "Rechercher";
+
+    const resultHeading = document.querySelector("#prospects .section-heading");
+    resultHeading?.querySelector(".eyebrow")?.remove();
+
+    const resultTitle = document.querySelector("#prospects-title");
+    if (resultTitle) resultTitle.textContent = "Prospects";
+
+    const summaryLabels = [
+      ["#summary-total", "Trouvés"],
+      ["#summary-audited", "Analysés"],
+      ["#summary-high", "À contacter"],
+      ["#summary-pending", "À qualifier"]
+    ];
+
+    for (const [selector, label] of summaryLabels) {
+      const value = document.querySelector(selector);
+      const card = value?.closest(".summary-card");
+      const text = card?.querySelector("span");
+      if (text) text.textContent = label;
+      card?.querySelector("small")?.remove();
+    }
+
+    const sourceNote = document.querySelector(".source-note p");
+    if (sourceNote) sourceNote.textContent = "Données publiques françaises et OpenStreetMap.";
+  }
+
+  function setFilterLabels() {
+    const select = document.querySelector("#qualification-filter");
+    if (!select) return;
+
+    const labels = {
+      all: "Tous",
+      contact_now: "À contacter",
+      secondary: "À proposer",
+      verify: "À qualifier",
+      equipped: "Peu prioritaires",
+      low_fit: "À écarter"
+    };
+
+    for (const option of select.options) {
+      if (labels[option.value]) option.textContent = labels[option.value];
+    }
+
+    const sort = document.querySelector("#sort");
+    if (sort?.options[0]) sort.options[0].textContent = "Meilleures opportunités";
   }
 
   function getPresentation(item) {
     const intelligence = item.commercialIntelligence;
     const websiteKnown = Boolean(item.website || item.noSiteConfirmed);
     const audited = Boolean(item.audit || item.noSiteConfirmed);
-    const hasIssue = hasMeaningfulIssue(item, intelligence);
 
     if (!websiteKnown) {
       return {
         label: "À qualifier",
         tone: "warning",
-        title: "Identifier le site avant de prospecter",
-        description: "Le potentiel de l’entreprise est intéressant, mais son besoin numérique ne peut pas être confirmé tant que le site officiel reste inconnu.",
-        diagnostic: "Site officiel non confirmé",
-        recommendation: "Aucune offre recommandée avant validation",
-        budget: "Après validation",
+        title: "Site à identifier",
+        reason: "Valide le site officiel avant de décider.",
+        recommendation: "Identifier le site",
+        budget: null,
         action: "find-site",
-        actionLabel: "Identifier le site"
+        actionLabel: "Identifier"
       };
     }
 
@@ -59,13 +141,12 @@
       return {
         label: "À analyser",
         tone: "warning",
-        title: "Analyser le site avant de contacter",
-        description: "Le site officiel est identifié. L’analyse doit maintenant confirmer qu’un besoin réel existe avant toute prise de contact.",
-        diagnostic: "Site identifié, besoin non mesuré",
-        recommendation: "Diagnostic en attente",
-        budget: "Après analyse",
+        title: "Site à analyser",
+        reason: "Mesure le besoin avant de contacter l’entreprise.",
+        recommendation: "Lancer l’analyse",
+        budget: null,
         action: "audit-site",
-        actionLabel: "Analyser le site"
+        actionLabel: "Analyser"
       };
     }
 
@@ -73,9 +154,8 @@
       return {
         label: "À contacter",
         tone: "danger",
-        title: "Prospect prioritaire",
-        description: "La capacité d’achat et le besoin numérique sont suffisamment confirmés pour préparer une prise de contact personnalisée.",
-        diagnostic: intelligence.primarySignal,
+        title: intelligence.primarySignal,
+        reason: "Le besoin et le potentiel commercial sont confirmés.",
         recommendation: intelligence.primaryOffer,
         budget: intelligence.priceRange,
         action: "contact",
@@ -85,43 +165,27 @@
 
     if (intelligence.verdict === "secondary") {
       return {
-        label: "Opportunité ciblée",
+        label: "À proposer",
         tone: "info",
-        title: "Une prestation ciblée peut être proposée",
-        description: "Une refonte complète n’est pas forcément justifiée, mais un problème précis peut faire l’objet d’une offre limitée.",
-        diagnostic: intelligence.primarySignal,
+        title: intelligence.primarySignal,
+        reason: "Une prestation ciblée peut être pertinente.",
         recommendation: intelligence.primaryOffer,
         budget: intelligence.priceRange,
         action: "contact",
-        actionLabel: "Préparer une approche ciblée"
-      };
-    }
-
-    if (intelligence.verdict === "equipped" && hasIssue) {
-      return {
-        label: "Optimisation ciblée",
-        tone: "info",
-        title: "Le site est correct, avec un axe d’amélioration",
-        description: "La refonte complète est peu pertinente. Une prestation courte et précisément cadrée reste toutefois commercialisable.",
-        diagnostic: intelligence.primarySignal,
-        recommendation: intelligence.primaryOffer,
-        budget: intelligence.priceRange,
-        action: "details",
-        actionLabel: "Voir les preuves"
+        actionLabel: "Préparer une offre"
       };
     }
 
     if (intelligence.verdict === "equipped") {
       return {
-        label: "Déjà bien équipé",
+        label: "Peu prioritaire",
         tone: "success",
-        title: "Aucun besoin prioritaire détecté",
-        description: "Le site paraît suffisamment solide. Ce prospect ne doit pas être ciblé pour une refonte sans nouveau signal commercial.",
-        diagnostic: "Site globalement satisfaisant",
-        recommendation: "Maintenance ou audit ponctuel uniquement",
-        budget: "Faible priorité",
+        title: "Site déjà satisfaisant",
+        reason: "Évite une refonte sans nouveau signal commercial.",
+        recommendation: "Maintenance ponctuelle",
+        budget: intelligence.priceRange,
         action: "details",
-        actionLabel: "Consulter l’analyse"
+        actionLabel: "Voir l’analyse"
       };
     }
 
@@ -129,88 +193,68 @@
       return {
         label: "À écarter",
         tone: "muted",
-        title: "Prospect peu adapté à l’offre",
-        description: "Le niveau de besoin ou la capacité commerciale estimée ne justifie pas d’y consacrer du temps maintenant.",
-        diagnostic: intelligence.primarySignal || "Adéquation insuffisante",
-        recommendation: "Aucune action commerciale immédiate",
-        budget: "Non prioritaire",
+        title: "Prospect peu adapté",
+        reason: "Le potentiel estimé ne justifie pas d’action immédiate.",
+        recommendation: "Aucune action",
+        budget: null,
         action: "ignore",
-        actionLabel: "Classer comme ignoré"
+        actionLabel: "Ignorer"
       };
     }
 
     return {
       label: "À vérifier",
       tone: "warning",
-      title: "Vérification complémentaire nécessaire",
-      description: "Les données disponibles ne suffisent pas encore pour prendre une décision commerciale fiable.",
-      diagnostic: intelligence.primarySignal,
-      recommendation: "À définir après vérification",
-      budget: "Après validation",
+      title: intelligence.primarySignal || "Données insuffisantes",
+      reason: "Vérifie les informations avant de prospecter.",
+      recommendation: "Compléter la qualification",
+      budget: null,
       action: "details",
       actionLabel: "Voir les preuves"
     };
   }
 
-  function setFilterLabels() {
-    const select = document.querySelector("#qualification-filter");
-    if (!select) return;
-    const labels = {
-      all: "Tous les prospects",
-      contact_now: "À contacter",
-      secondary: "Opportunités ciblées",
-      verify: "À qualifier",
-      equipped: "Optimisation légère ou équipé",
-      low_fit: "À écarter"
-    };
-    [...select.options].forEach((option) => {
-      if (labels[option.value]) option.textContent = labels[option.value];
-    });
-  }
-
-  function renderPriorityCell(cell, item, presentation) {
+  function renderScoreCell(cell, item, presentation) {
     cell.replaceChildren();
     cell.className = "sl-priority-cell";
 
-    const top = element("div", "sl-priority-line");
-    top.append(
-      element("strong", "sl-priority-score", `${item.commercialIntelligence.opportunityScore}/100`),
+    const line = element("div", "sl-priority-line");
+    line.append(
+      element("strong", "sl-priority-score", `${item.commercialIntelligence.opportunityScore}`),
       element("span", `sl-status sl-status-${presentation.tone}`, presentation.label)
     );
-
-    cell.append(
-      top,
-      element("span", "sl-confidence", `Fiabilité ${item.commercialIntelligence.confidence}/100`)
-    );
+    cell.append(line);
   }
 
-  function renderDiagnosticCell(cell, item, presentation) {
+  function renderRecommendationCell(cell, item, presentation) {
     cell.replaceChildren();
     cell.className = "sl-diagnostic-cell";
+
     const host = safeHostname(item.website);
-    const meta = host
-      ? `${host} · ${presentation.recommendation}`
+    const detail = host
+      ? `${presentation.recommendation} · ${host}`
       : presentation.recommendation;
 
     cell.append(
-      element("strong", "sl-diagnostic-title", presentation.diagnostic),
-      element("span", "sl-diagnostic-meta", meta)
+      element("strong", "sl-diagnostic-title", presentation.title),
+      element("span", "sl-diagnostic-meta", detail)
     );
   }
 
   function enhanceTable() {
     const table = document.querySelector(".prospect-table");
     if (!table) return;
-    table.className = "prospect-table sl-prospect-table";
 
+    table.className = "prospect-table sl-prospect-table";
     const headers = [...table.querySelectorAll("thead th")];
+
     if (headers.length >= 6) {
-      headers[0].textContent = "Entreprise";
-      headers[1].textContent = "Priorité";
-      headers[2].textContent = "Diagnostic";
+      headers[0].textContent = "Prospect";
+      headers[1].textContent = "Score";
+      headers[2].textContent = "Prochaine action";
       headers[3].classList.add("sl-hidden-column");
       headers[4].classList.add("sl-hidden-column");
-      headers[5].innerHTML = '<span class="visually-hidden">Actions</span>';
+      headers[5].innerHTML = '<span class="visually-hidden">Ouvrir</span>';
     }
 
     const visibleItems = getVisibleItems();
@@ -225,16 +269,17 @@
       row.className = `sl-prospect-row sl-tone-${presentation.tone}`;
       row.dataset.prospectId = item.id;
       row.tabIndex = 0;
-      cells[0].className = "company-cell";
-      renderPriorityCell(cells[1], item, presentation);
-      renderDiagnosticCell(cells[2], item, presentation);
+
+      renderScoreCell(cells[1], item, presentation);
+      renderRecommendationCell(cells[2], item, presentation);
       cells[3].classList.add("sl-hidden-column");
       cells[4].classList.add("sl-hidden-column");
       cells[5].className = "row-actions sl-row-actions";
 
       const button = cells[5].querySelector("button");
       if (!button) return;
-      button.textContent = presentation.action === "find-site" ? "Qualifier" : "Ouvrir";
+
+      button.textContent = "Voir";
       button.className = "button button-secondary sl-open-button";
       button.setAttribute("aria-label", `Ouvrir ${item.commercialName || item.name}`);
 
@@ -253,64 +298,39 @@
     });
   }
 
-  function createFact(label, value, caption) {
-    const article = element("article", "sl-fact");
-    article.append(
-      element("span", "sl-fact-label", label),
-      element("strong", "sl-fact-value", value),
-      element("small", "sl-fact-caption", caption)
-    );
-    return article;
+  function ensureDecisionSection() {
+    const body = document.querySelector("#prospect-dialog .dialog-body");
+    if (!body) return null;
+
+    let section = document.querySelector("#commercial-intelligence-section");
+    if (!section) {
+      section = document.createElement("section");
+      section.id = "commercial-intelligence-section";
+      body.prepend(section);
+    }
+    return section;
   }
 
-  function createList(values, fallback) {
+  function createProofList(values) {
     const list = element("ul", "sl-proof-list");
-    const entries = values?.length ? values : [fallback];
-    entries.slice(0, 5).forEach((value) => list.append(element("li", "", value)));
+    const entries = values?.length ? values.slice(0, 4) : ["Vérification complémentaire nécessaire"];
+    for (const value of entries) list.append(element("li", "", value));
     return list;
   }
 
-  function buildBrief(item, presentation) {
-    const intelligence = item.commercialIntelligence;
-    const lines = [
-      item.commercialName || item.name,
-      `Décision : ${presentation.label}`,
-      `Priorité : ${intelligence.opportunityScore}/100`,
-      `Diagnostic : ${presentation.diagnostic}`,
-      `Prestation : ${presentation.recommendation}`,
-      `Budget indicatif : ${presentation.budget}`,
-      ""
-    ];
-
-    if (intelligence.evidence?.length) {
-      lines.push("Éléments vérifiables :");
-      intelligence.evidence.slice(0, 5).forEach((value) => lines.push(`• ${value}`));
-    }
-    return lines.join("\n");
-  }
-
   function runPrimaryAction(action) {
-    if (action === "find-site") {
-      const details = document.querySelector(".sl-site-workflow");
-      if (details) details.open = true;
-      document.querySelector(".site-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      window.setTimeout(() => document.querySelector("#find-site")?.click(), 250);
-      return;
-    }
-
-    if (action === "audit-site") {
-      const details = document.querySelector(".sl-site-workflow");
-      if (details) details.open = true;
-      document.querySelector(".site-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      window.setTimeout(() => document.querySelector("#audit-site")?.click(), 250);
+    if (action === "find-site" || action === "audit-site") {
+      const workflow = document.querySelector(".sl-site-workflow");
+      if (workflow) workflow.open = true;
+      const target = action === "find-site" ? "#find-site" : "#audit-site";
+      window.setTimeout(() => document.querySelector(target)?.click(), 150);
       return;
     }
 
     if (action === "contact") {
-      const details = document.querySelector(".sl-contact-workflow");
-      if (details) details.open = true;
-      document.querySelector("#contact-message")?.scrollIntoView({ behavior: "smooth", block: "center" });
-      window.setTimeout(() => document.querySelector("#contact-message")?.focus(), 250);
+      const workflow = document.querySelector(".sl-contact-workflow");
+      if (workflow) workflow.open = true;
+      window.setTimeout(() => document.querySelector("#contact-message")?.focus(), 150);
       return;
     }
 
@@ -324,108 +344,79 @@
       return;
     }
 
-    const details = document.querySelector(".sl-reasoning");
-    if (details) {
-      details.open = true;
-      details.scrollIntoView({ behavior: "smooth", block: "nearest" });
-    }
+    const proofs = document.querySelector(".sl-proof-details");
+    if (proofs) proofs.open = true;
   }
 
   function rebuildDecisionSection(item) {
-    const section = document.querySelector("#commercial-intelligence-section");
+    const section = ensureDecisionSection();
     if (!section) return;
 
     const intelligence = item.commercialIntelligence;
     const presentation = getPresentation(item);
-    const website = safeHostname(item.website) || (item.noSiteConfirmed ? "Aucun site" : "Non confirmé");
-    const needScore = Number.isFinite(item.siteNeed?.score) ? `${item.siteNeed.score}/100` : "Non mesuré";
 
     section.className = `dialog-section sl-decision-section sl-tone-${presentation.tone}`;
     section.replaceChildren();
 
-    const hero = element("div", "sl-decision-hero");
-    const content = element("div", "sl-decision-content");
-    const statusLine = element("div", "sl-decision-status");
-    statusLine.append(
+    const main = element("div", "sl-decision-main");
+    const copy = element("div", "sl-decision-copy");
+    const status = element("div", "sl-decision-status");
+    status.append(
       element("span", `sl-status sl-status-${presentation.tone}`, presentation.label),
-      element("span", "sl-decision-confidence", `Fiabilité ${intelligence.confidence}/100`)
+      element("span", "sl-decision-confidence", `Confiance ${intelligence.confidence}/100`)
     );
 
-    content.append(
-      statusLine,
+    copy.append(
+      status,
       element("h3", "sl-decision-title", presentation.title),
-      element("p", "sl-decision-description", presentation.description)
+      element("p", "sl-decision-description", presentation.reason)
     );
 
     const score = element("div", "sl-decision-score");
     score.append(
       element("strong", "", String(intelligence.opportunityScore)),
-      element("span", "", "/100 priorité")
+      element("span", "", "/100")
     );
-    hero.append(content, score);
+    main.append(copy, score);
 
-    const facts = element("div", "sl-fact-grid");
-    facts.append(
-      createFact("Potentiel d’achat", `${item.businessScore ?? 0}/100`, "Capacité commerciale estimée"),
-      createFact("Besoin numérique", needScore, Number.isFinite(item.siteNeed?.score) ? "Besoin mesuré" : "Qualification incomplète"),
-      createFact("Site officiel", website, item.audit ? "Analysé" : "À vérifier")
+    const actionBar = element("div", "sl-action-bar");
+    const actionCopy = element("div", "sl-action-copy");
+    actionCopy.append(
+      element("span", "sl-action-label", "Action recommandée"),
+      element("strong", "sl-action-title", presentation.recommendation)
     );
+    if (presentation.budget) {
+      actionCopy.append(element("small", "sl-action-budget", presentation.budget));
+    }
 
-    const offer = element("div", "sl-offer-strip");
-    const offerContent = element("div", "sl-offer-copy");
-    offerContent.append(
-      element("span", "sl-offer-label", "Prestation recommandée"),
-      element("strong", "sl-offer-title", presentation.recommendation),
-      element("small", "sl-offer-budget", `Budget indicatif : ${presentation.budget}`)
-    );
-    const primaryButton = element("button", "button button-primary sl-primary-action", presentation.actionLabel);
-    primaryButton.type = "button";
-    primaryButton.addEventListener("click", () => runPrimaryAction(presentation.action));
-    offer.append(offerContent, primaryButton);
+    const actionButton = element("button", "button button-primary sl-primary-action", presentation.actionLabel);
+    actionButton.type = "button";
+    actionButton.addEventListener("click", () => runPrimaryAction(presentation.action));
+    actionBar.append(actionCopy, actionButton);
 
-    const reasoning = document.createElement("details");
-    reasoning.className = "sl-reasoning";
-    reasoning.append(element("summary", "", "Pourquoi ce verdict ?"));
-    const reasonBody = element("div", "sl-reason-body");
-    const signalColumn = element("div", "sl-reason-column");
-    signalColumn.append(
-      element("h4", "", "Points observés"),
-      createList(intelligence.signals, "Aucun problème prioritaire détecté")
-    );
-    const proofColumn = element("div", "sl-reason-column");
-    proofColumn.append(
-      element("h4", "", "Éléments vérifiables"),
-      createList(intelligence.evidence, "Vérification complémentaire nécessaire")
-    );
-    reasonBody.append(signalColumn, proofColumn);
+    const proofs = document.createElement("details");
+    proofs.className = "sl-proof-details";
+    proofs.append(element("summary", "", "Voir les preuves"));
+    const proofBody = element("div", "sl-proof-body");
+    proofBody.append(createProofList(intelligence.evidence));
+    proofs.append(proofBody);
 
-    const copyButton = element("button", "button button-secondary sl-copy-brief", "Copier le brief commercial");
-    copyButton.type = "button";
-    copyButton.addEventListener("click", async () => {
-      try {
-        await navigator.clipboard.writeText(buildBrief(item, presentation));
-        showNotice("Brief commercial copié.", "success");
-      } catch {
-        showNotice("La copie automatique a échoué.", "warning");
-      }
-    });
-    reasonBody.append(copyButton);
-    reasoning.append(reasonBody);
-
-    section.append(hero, facts, offer, reasoning);
+    section.append(main, actionBar, proofs);
   }
 
   function createWorkflow(section, className, title, nodes) {
-    let details = section.querySelector(`.${className}`);
-    if (details) return details;
+    const existing = section.querySelector(`.${className}`);
+    if (existing) return existing;
 
-    details = document.createElement("details");
+    const details = document.createElement("details");
     details.className = `sl-workflow ${className}`;
+
     const summary = element("summary", "sl-workflow-summary");
     summary.append(
       element("span", "sl-workflow-title", title),
       element("span", "sl-workflow-caption", "")
     );
+
     details.append(summary, ...nodes.filter(Boolean));
     section.append(details);
     return details;
@@ -434,25 +425,30 @@
   function prepareSiteSection(item) {
     const section = document.querySelector(".site-section");
     if (!section) return;
-    section.className = "dialog-section site-section sl-workflow-section";
+
+    section.className = "dialog-section sl-workflow-section";
     section.querySelector(":scope > .section-heading")?.remove();
     section.querySelector(":scope > .site-guidance")?.remove();
 
-    const details = createWorkflow(section, "sl-site-workflow", "Vérification du site", [
+    const workflow = createWorkflow(section, "sl-site-workflow", "Site internet", [
       section.querySelector(":scope > .site-toolbar"),
       section.querySelector(":scope > .confirmation-control"),
       section.querySelector(":scope > .site-audit-layout"),
       section.querySelector(":scope > .manual-review")
     ]);
 
-    const caption = details.querySelector(".sl-workflow-caption");
-    if (!item.website && !item.noSiteConfirmed) caption.textContent = "Site officiel à identifier";
-    else if (item.website && !item.audit) caption.textContent = "Site identifié, analyse requise";
-    else caption.textContent = "Analyse terminée";
-    details.open = !item.website || !item.audit;
+    const caption = workflow.querySelector(".sl-workflow-caption");
+    if (!item.website && !item.noSiteConfirmed) caption.textContent = "À identifier";
+    else if (item.website && !item.audit) caption.textContent = "À analyser";
+    else caption.textContent = "Analysé";
+
+    workflow.open = !item.website || !item.audit;
 
     const findButton = document.querySelector("#find-site");
-    if (findButton) findButton.textContent = "Rechercher le site";
+    if (findButton) findButton.textContent = "Rechercher";
+    const saveButton = document.querySelector("#save-site");
+    if (saveButton) saveButton.textContent = "Valider";
+
     const auditLayout = document.querySelector(".site-audit-layout");
     if (auditLayout) auditLayout.hidden = !item.website;
     const manualReview = document.querySelector(".manual-review");
@@ -460,53 +456,66 @@
   }
 
   function prepareContactSection(item) {
-    const section = document.querySelector("#contact-title")?.closest(".dialog-section");
+    const section = document.querySelector("#contact-title")?.closest(".dialog-section")
+      || document.querySelector(".sl-contact-workflow")?.closest(".dialog-section");
     if (!section) return;
+
     section.className = "dialog-section sl-workflow-section";
+    let workflow = section.querySelector(".sl-contact-workflow");
 
-    const heading = section.querySelector(":scope > .section-heading");
-    const status = section.querySelector("#prospect-status");
-    const statusField = element("label", "sl-status-field");
-    statusField.append(element("span", "", "Statut commercial"));
-    if (status) statusField.append(status);
+    if (!workflow) {
+      const status = section.querySelector("#prospect-status");
+      const statusField = element("label", "sl-status-field");
+      statusField.append(element("span", "", "Statut"));
+      if (status) statusField.append(status);
 
-    const details = createWorkflow(section, "sl-contact-workflow", "Contact commercial", [
-      statusField,
-      section.querySelector('label[for="contact-message"]'),
-      section.querySelector("#contact-message"),
-      section.querySelector(".dialog-actions")
-    ]);
-    heading?.remove();
+      workflow = createWorkflow(section, "sl-contact-workflow", "Contact", [
+        statusField,
+        section.querySelector('label[for="contact-message"]'),
+        section.querySelector("#contact-message"),
+        section.querySelector(".dialog-actions")
+      ]);
+      section.querySelector(":scope > .section-heading")?.remove();
+    }
 
     const ready = ["contact_now", "secondary"].includes(item.commercialIntelligence.verdict);
-    details.querySelector(".sl-workflow-caption").textContent = ready
-      ? "Message prêt à personnaliser"
-      : "Disponible après qualification";
-    details.open = ready;
+    workflow.querySelector(".sl-workflow-caption").textContent = ready ? "Message prêt" : "Après qualification";
+    workflow.open = ready;
     if (dom.contactMessage) dom.contactMessage.rows = 5;
+
+    const copyButton = document.querySelector("#copy-message");
+    if (copyButton) copyButton.textContent = "Copier";
+    const saveButton = document.querySelector("#save-prospect");
+    if (saveButton) saveButton.textContent = "Enregistrer";
   }
 
   function prepareBusinessSection(item) {
-    const section = document.querySelector("#business-title")?.closest(".dialog-section");
+    const section = document.querySelector("#business-title")?.closest(".dialog-section")
+      || document.querySelector(".sl-business-workflow")?.closest(".dialog-section");
     if (!section) return;
-    section.className = "dialog-section sl-workflow-section sl-business-section";
 
-    const details = createWorkflow(section, "sl-business-workflow", "Données de l’entreprise", [
+    section.className = "dialog-section sl-workflow-section";
+    const workflow = createWorkflow(section, "sl-business-workflow", "Entreprise", [
       section.querySelector("#dialog-metrics"),
       section.querySelector("#dialog-business-evidence")
     ]);
+
     section.querySelector(":scope > .section-heading")?.remove();
-    details.querySelector(".sl-workflow-caption").textContent = `Potentiel ${item.businessScore ?? 0}/100`;
-    details.open = false;
+    workflow.querySelector(".sl-workflow-caption").textContent = `Potentiel ${item.businessScore ?? 0}/100`;
+    workflow.open = false;
   }
 
   function orderDialogSections() {
     const body = document.querySelector("#prospect-dialog .dialog-body");
     const decision = document.querySelector("#commercial-intelligence-section");
-    const site = document.querySelector(".site-section");
+    const site = document.querySelector(".sl-site-workflow")?.closest(".dialog-section");
     const contact = document.querySelector(".sl-contact-workflow")?.closest(".dialog-section");
     const business = document.querySelector(".sl-business-workflow")?.closest(".dialog-section");
-    if (body && decision && site && contact && business) body.append(decision, site, contact, business);
+
+    if (!body) return;
+    for (const section of [decision, site, contact, business]) {
+      if (section) body.append(section);
+    }
   }
 
   function enhanceDialog() {
@@ -515,6 +524,8 @@
     if (!item?.commercialIntelligence || !dialog) return;
 
     dialog.classList.add("sl-prospect-dialog");
+    if (dom.dialogSegment) dom.dialogSegment.hidden = true;
+
     rebuildDecisionSection(item);
     prepareSiteSection(item);
     prepareContactSection(item);
@@ -522,14 +533,15 @@
     orderDialogSections();
   }
 
-  render = function renderSignalLeadProduct() {
-    ORIGINAL_RENDER();
+  render = function renderSignalLeadSimpleUi() {
+    baseRender();
+    simplifyPageChrome();
     setFilterLabels();
     enhanceTable();
   };
 
-  syncDialog = function syncSignalLeadDialog() {
-    ORIGINAL_SYNC_DIALOG();
+  syncDialog = function syncSignalLeadSimpleDialog() {
+    baseSyncDialog();
     enhanceDialog();
   };
 
