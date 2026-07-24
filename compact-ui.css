@@ -1,0 +1,168 @@
+.compact-table {
+  table-layout: fixed;
+}
+
+.compact-table th:nth-child(1),
+.compact-table td:nth-child(1) {
+  width: 24%;
+}
+
+.compact-table th:nth-child(2),
+.compact-table td:nth-child(2) {
+  width: 18%;
+}
+
+.compact-table th:nth-child(3),
+.compact-table td:nth-child(3) {
+  width: auto;
+}
+
+.compact-table th:nth-child(6),
+.compact-table td:nth-child(6) {
+  width: 118px;
+}
+
+.compact-hidden {
+  display: none !important;
+}
+
+.compact-row td {
+  padding-top: 0.8rem;
+  padding-bottom: 0.8rem;
+}
+
+.compact-opportunity {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.compact-score {
+  color: var(--navy-950);
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.compact-confidence,
+.compact-offer,
+.compact-metadata {
+  display: block;
+}
+
+.compact-confidence,
+.compact-metadata {
+  margin-top: 0.3rem;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.compact-signal {
+  display: block;
+  color: var(--navy-950);
+  font-size: 0.86rem;
+  line-height: 1.35;
+}
+
+.compact-offer {
+  margin-top: 0.25rem;
+  color: var(--navy-700);
+  font-size: 0.76rem;
+  line-height: 1.35;
+}
+
+.compact-row .row-actions .button {
+  min-width: 94px;
+}
+
+.compact-commercial-section .commercial-overview {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-secondary-metric {
+  display: none;
+}
+
+.compact-commercial-section .commercial-recommendation {
+  margin-top: 0.65rem;
+}
+
+.commercial-detail-disclosure,
+.business-detail-disclosure,
+.manual-review-disclosure {
+  margin-top: 0.8rem;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.commercial-detail-disclosure > summary,
+.business-detail-disclosure > summary,
+.manual-review-disclosure > summary {
+  cursor: pointer;
+  color: var(--navy-700);
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.commercial-detail-disclosure[open] > summary,
+.business-detail-disclosure[open] > summary,
+.manual-review-disclosure[open] > summary {
+  margin-bottom: 0.75rem;
+}
+
+.compact-secondary-section {
+  padding-top: 0.9rem;
+  padding-bottom: 0.9rem;
+}
+
+.compact-secondary-section > .section-heading {
+  margin-bottom: 0;
+}
+
+.manual-review-disclosure .manual-review {
+  margin-top: 0;
+  border: 0;
+  padding: 0;
+}
+
+.compact-dialog .dialog-body {
+  gap: 0.8rem;
+}
+
+.compact-dialog .dialog-section {
+  padding: 1rem;
+}
+
+@media (max-width: 900px) {
+  .compact-table {
+    table-layout: auto;
+  }
+
+  .compact-table th:nth-child(1),
+  .compact-table td:nth-child(1),
+  .compact-table th:nth-child(2),
+  .compact-table td:nth-child(2),
+  .compact-table th:nth-child(3),
+  .compact-table td:nth-child(3),
+  .compact-table th:nth-child(6),
+  .compact-table td:nth-child(6) {
+    width: auto;
+  }
+}
+
+@media (max-width: 720px) {
+  .compact-row td {
+    grid-template-columns: 105px 1fr;
+  }
+
+  .compact-row .compact-opportunity-cell,
+  .compact-row .compact-recommendation-cell {
+    display: grid;
+  }
+
+  .compact-commercial-section .commercial-overview,
+  .compact-commercial-section .commercial-recommendation {
+    grid-template-columns: 1fr;
+  }
+}
