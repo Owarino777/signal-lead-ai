@@ -51,11 +51,13 @@ window.SIGNAL_LEAD_BACKEND = Object.freeze({
   async function start() {
     loadStyle("product-ui.css");
     loadStyle("simple-ui.css");
+    loadStyle("contact-actions.css");
     loadStyle("saas-ui.css");
 
     try {
       await loadScript("commercial-core.js");
       await loadScript("product-ui.js");
+      await loadScript("contact-actions.js");
       await loadScript("saas-client.js");
     } catch (error) {
       console.error("SignalLead UI bootstrap failed", error);
