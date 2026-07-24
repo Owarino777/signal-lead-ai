@@ -23,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for file in app.js fast-enrichment.js backend-config.js worker-client.js commercial-core.js product-ui.js saas-client.js; do
+          for file in app.js fast-enrichment.js backend-config.js worker-client.js commercial-core.js product-ui.js contact-actions.js saas-client.js; do
             node --check "$file"
           done
 
@@ -35,6 +35,8 @@ jobs:
           test "$(grep -c 'src="backend-config.js"' index.html)" -eq 1
           grep -q 'commercial-core.js' backend-config.js
           grep -q 'product-ui.js' backend-config.js
+          grep -q 'contact-actions.js' backend-config.js
+          grep -q 'contact-actions.css' backend-config.js
           grep -q 'saas-client.js' backend-config.js
           grep -q 'saas-ui.css' backend-config.js
 
