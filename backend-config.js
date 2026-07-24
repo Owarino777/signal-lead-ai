@@ -4,8 +4,15 @@ window.SIGNAL_LEAD_BACKEND = Object.freeze({
   baseUrl: "https://signal-lead-api.malikcheikhpro14.workers.dev"
 });
 
+function findLoadedAsset(selector, path) {
+  return [...document.querySelectorAll(selector)].find((element) => {
+    const value = element.getAttribute(selector === "script[src]" ? "src" : "href") || "";
+    return value === path || value.endsWith(`/${path}`);
+  }) || null;
+}
+
 function appendStylesheetOnce(href) {
-  if (document.querySelector(`link[rel="stylesheet"][href="${href}"]`)) return;
+  if (findLoadedAsset('link[rel="stylesheet"][href]', href)) return;
   const stylesheet = document.createElement("link");
   stylesheet.rel = "stylesheet";
   stylesheet.href = href;
@@ -13,14 +20,11 @@ function appendStylesheetOnce(href) {
 }
 
 function appendScriptOnce(src, onLoad) {
-  const existing = [...document.scripts].find((script) => {
-    const value = script.getAttribute("src") || "";
-    return value === src || value.endsWith(`/${src}`);
-  });
+  const existing = findLoadedAsset("script[src]", src);
 
   if (existing) {
     if (onLoad) {
-      if (existing.dataset.loaded === "true") onLoad();
+      if (existing.dataset.loaded === "true" || existing.readyState === "complete") onLoad();
       else existing.addEventListener("load", onLoad, { once: true });
     }
     return existing;
@@ -53,6 +57,12 @@ function loadSignalLeadModules() {
 
   if (typeof WORKER_CLIENT !== "undefined") {
     loadCommercialUi();
+    return;
+  }
+
+  const legacyWorkerClient = findLoadedAsset("script[src]", "worker-client.js");
+  if (legacyWorkerClient) {
+    legacyWorkerClient.addEventListener("load", loadCommercialUi, { once: true });
     return;
   }
 
