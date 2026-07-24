@@ -4,18 +4,27 @@ window.SIGNAL_LEAD_BACKEND = Object.freeze({
   baseUrl: "https://signal-lead-api.malikcheikhpro14.workers.dev"
 });
 
-window.addEventListener("DOMContentLoaded", () => {
+function appendStylesheet(href) {
   const stylesheet = document.createElement("link");
   stylesheet.rel = "stylesheet";
-  stylesheet.href = "commercial-intelligence.css";
+  stylesheet.href = href;
   document.head.append(stylesheet);
+}
 
-  const enrichmentScript = document.createElement("script");
-  enrichmentScript.src = "worker-client-v2.js";
-  enrichmentScript.addEventListener("load", () => {
-    const intelligenceScript = document.createElement("script");
-    intelligenceScript.src = "commercial-intelligence.js";
-    document.head.append(intelligenceScript);
-  }, { once: true });
-  document.head.append(enrichmentScript);
+function appendScript(src, onLoad) {
+  const script = document.createElement("script");
+  script.src = src;
+  if (onLoad) script.addEventListener("load", onLoad, { once: true });
+  document.head.append(script);
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  appendStylesheet("commercial-intelligence.css");
+  appendStylesheet("compact-ui.css");
+
+  appendScript("worker-client-v2.js", () => {
+    appendScript("commercial-intelligence.js", () => {
+      appendScript("compact-ui.js");
+    });
+  });
 }, { once: true });
